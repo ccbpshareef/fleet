@@ -2029,6 +2029,81 @@ button:disabled {
   align-content: start;
 }
 
+.assignment-highlight-card,
+.assignment-period-card {
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  padding: 14px;
+  background: #fff;
+}
+
+.assignment-pay-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.assignment-pay-grid span {
+  display: block;
+  font-size: 12px;
+  color: #64748b;
+}
+
+.assignment-pay-formula {
+  margin-top: 10px;
+  font-size: 13px;
+}
+
+.assignment-period-list {
+  display: grid;
+  gap: 10px;
+}
+
+.assignment-period-top {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: flex-start;
+}
+
+.assignment-trip-table {
+  margin-top: 10px;
+  display: grid;
+  gap: 6px;
+}
+
+.assignment-trip-row {
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  gap: 8px;
+  font-size: 13px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: #f8fafc;
+}
+
+.assignment-rate-locked {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: #0f766e;
+  background: #ecfdf5;
+  border-radius: 999px;
+  padding: 2px 8px;
+}
+
+.assignment-help-box {
+  padding: 12px 14px;
+  border-radius: 10px;
+  background: #f8fafc;
+  border: 1px dashed #cbd5e1;
+  font-size: 13px;
+  color: #475569;
+  line-height: 1.5;
+}
+
 .assignment-card strong {
   color: #0f172a;
 }
@@ -2732,6 +2807,16 @@ button:disabled {
   justify-content: space-between;
   gap: 12px;
   margin-bottom: 8px;
+}
+
+.driver-detail-modal-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.driver-delete-btn {
+  color: var(--danger);
 }
 
 .driver-detail-close-btn {
@@ -4665,4 +4750,138 @@ button:disabled {
 .mobile-app-shell .stat-box {
   min-width: 0;
   max-width: 100%;
+}
+
+.assignment-accept-card {
+  border: 1px solid #fcd34d;
+  background: #fffbeb;
+}
+
+.assignment-accept-card h3 {
+  margin: 0 0 8px;
+}
+
+.notification-bell-wrap {
+  position: relative;
+}
+
+.notification-bell-btn {
+  position: relative;
+  width: 40px;
+  height: 40px;
+  border-radius: 999px;
+  border: 1px solid #e2e8f0;
+  background: #fff;
+  font-size: 18px;
+  cursor: pointer;
+}
+
+.notification-bell-badge {
+  position: absolute;
+  top: -4px;
+  right: -4px;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 4px;
+  border-radius: 999px;
+  background: #dc2626;
+  color: #fff;
+  font-size: 10px;
+  font-weight: 700;
+  display: grid;
+  place-items: center;
+}
+
+.notification-panel {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  width: min(360px, 92vw);
+  max-height: 420px;
+  overflow: auto;
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  box-shadow: 0 16px 40px rgba(15, 23, 42, 0.12);
+  z-index: 40;
+}
+
+.notification-panel-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 14px;
+  border-bottom: 1px solid #e2e8f0;
+  position: sticky;
+  top: 0;
+  background: #fff;
+}
+
+.notification-list {
+  display: grid;
+}
+
+.notification-item {
+  text-align: left;
+  padding: 12px 14px;
+  border: 0;
+  border-bottom: 1px solid #f1f5f9;
+  background: #fff;
+  cursor: pointer;
+}
+
+.notification-item.unread {
+  background: #f8fafc;
+}
+
+.notification-item-top {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+
+.notification-time {
+  font-size: 11px;
+  color: #64748b;
+  white-space: nowrap;
+}
+
+.notification-item p {
+  margin: 0;
+  font-size: 13px;
+  color: #475569;
+  line-height: 1.45;
+}
+
+.notification-driver-tag {
+  display: inline-block;
+  margin-top: 6px;
+  font-size: 11px;
+  color: #0f766e;
+}
+
+.notification-empty {
+  padding: 16px 14px;
+}
+
+.assignment-period-past {
+  opacity: 0.92;
+  background: #f8fafc;
+}
+
+.assignment-card-current {
+  border-color: #86efac;
+  box-shadow: inset 3px 0 0 #16a34a;
+}
+
+.assignment-card-past {
+  opacity: 0.95;
+}
+
+.top-profile-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }

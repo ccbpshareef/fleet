@@ -15,6 +15,7 @@ from .models import (
     DriverAssignmentLeave,
     Expense,
     Lorry,
+    Notification,
     Trip,
     UserAccount,
     UserProfile,
@@ -27,6 +28,7 @@ from .schemas import (
     DriverAssignmentLeaveCreate,
     DriverAssignmentLeaveOut,
     DriverAssignmentOut,
+    DriverAssignmentTripOut,
     DriverAssignmentUpdate,
     DriverCreate,
     DriverHistoryOut,
@@ -44,6 +46,7 @@ from .schemas import (
     UserIdCheckResponse,
     LorryCreate,
     LorryOut,
+    NotificationOut,
     TripCreate,
     TripOut,
     TripStatusUpdate,
@@ -141,6 +144,60 @@ def assignment_leave_days(assignment: DriverAssignment) -> int:
     return len(leave_days)
 
 
+def assignment_gap_days_before(db: Session, assignment: DriverAssignment) -> int:
+    previous = (
+        db.query(DriverAssignment)
+        .filter(
+            DriverAssignment.driver_id == assignment.driver_id,
+            DriverAssignment.id != assignment.id,
+            DriverAssignment.completed_at.isnot(None),
+            DriverAssignment.completed_at <= assignment.assigned_at,
+        )
+        .order_by(DriverAssignment.completed_at.desc())
+        .first()
+    )
+    if not previous or not previous.completed_at:
+        return 0
+    gap_start = previous.completed_at.date()
+    gap_end = assignment.assigned_at.date()
+    if gap_end <= gap_start:
+        return 0
+    return max((gap_end - gap_start).days - 1, 0)
+
+
+def current_stint_ids_for_assignments(assignments: list[DriverAssignment]) -> set[int]:
+    by_driver: dict[int, list[DriverAssignment]] = {}
+    for assignment in assignments:
+        by_driver.setdefault(assignment.driver_id, []).append(assignment)
+    current_ids: set[int] = set()
+    for items in by_driver.values():
+        active = next((item for item in items if item.status == "Active"), None)
+        if active:
+            current_ids.add(active.id)
+            continue
+        latest = max(items, key=lambda item: item.assigned_at)
+        current_ids.add(latest.id)
+    return current_ids
+
+
+def serialize_assignments_list(
+    db: Session,
+    assignments: list[DriverAssignment],
+    viewer_role: str | None = None,
+) -> list[DriverAssignmentOut]:
+    current_ids = current_stint_ids_for_assignments(assignments)
+    return [
+        serialize_assignment(
+            db,
+            assignment,
+            viewer_role,
+            is_current_stint=assignment.id in current_ids,
+            gap_days_before=assignment_gap_days_before(db, assignment),
+        )
+        for assignment in assignments
+    ]
+
+
 def trip_matches_assignment_window(trip: Trip, assignment: DriverAssignment) -> bool:
     trip_day = (
         trip.loading_date
@@ -152,25 +209,81 @@ def trip_matches_assignment_window(trip: Trip, assignment: DriverAssignment) -> 
     return assignment.assigned_at.date() <= trip_day <= assignment_effective_end(assignment).date()
 
 
-def assignment_transport_total(db: Session, assignment: DriverAssignment) -> float:
+def assignment_trips_for(db: Session, assignment: DriverAssignment) -> list[Trip]:
     trips = (
         db.query(Trip)
         .filter(
             Trip.driver_id == assignment.driver_id,
             Trip.lorry_id == assignment.lorry_id,
         )
+        .order_by(Trip.loading_date.desc(), Trip.id.desc())
         .all()
     )
-    return sum(trip.load_price or 0 for trip in trips if trip_matches_assignment_window(trip, assignment))
+    return [trip for trip in trips if trip_matches_assignment_window(trip, assignment)]
 
 
-def serialize_assignment(db: Session, assignment: DriverAssignment) -> DriverAssignmentOut:
+def serialize_assignment_trip(trip: Trip, commission_percent: float) -> DriverAssignmentTripOut:
+    load_price = float(trip.load_price or 0)
+    percent = float(commission_percent or 0)
+    return DriverAssignmentTripOut(
+        trip_id=trip.id,
+        route=f"{trip.load_location} -> {trip.unload_location}",
+        load_price=load_price,
+        working_days=trip_working_days(trip),
+        commission_percent=percent,
+        commission_amount=round_money(load_price * (percent / 100)),
+        loading_date=trip.loading_date,
+        unloading_date=trip.unloading_date,
+        status=trip.status,
+    )
+
+
+def complete_active_assignments_for_driver(
+    db: Session,
+    driver_id: int,
+    completed_at: datetime,
+    *,
+    exclude_assignment_id: int | None = None,
+) -> None:
+    active_assignments = (
+        db.query(DriverAssignment)
+        .filter(DriverAssignment.driver_id == driver_id, DriverAssignment.status == "Active")
+        .all()
+    )
+    for assignment in active_assignments:
+        if exclude_assignment_id and assignment.id == exclude_assignment_id:
+            continue
+        assignment.status = "Completed"
+        assignment.completed_at = completed_at
+        lorry = db.query(Lorry).filter(Lorry.id == assignment.lorry_id).first()
+        if lorry and lorry.driver_id == assignment.driver_id:
+            lorry.driver_id = None
+
+
+def assignment_transport_total(db: Session, assignment: DriverAssignment) -> float:
+    trips = assignment_trips_for(db, assignment)
+    return sum(trip.load_price or 0 for trip in trips)
+
+
+def serialize_assignment(
+    db: Session,
+    assignment: DriverAssignment,
+    viewer_role: str | None = None,
+    *,
+    is_current_stint: bool = False,
+    gap_days_before: int | None = None,
+) -> DriverAssignmentOut:
     total_days = assignment_total_days(assignment)
     leave_days = assignment_leave_days(assignment)
     working_days = max(total_days - leave_days, 0)
-    total_transport_amount = assignment_transport_total(db, assignment)
+    assignment_trips = assignment_trips_for(db, assignment)
+    commission_percent = float(assignment.commission_percent or 0)
+    trip_items = [serialize_assignment_trip(trip, commission_percent) for trip in assignment_trips]
+    total_transport_amount = round_money(sum(item.load_price for item in trip_items))
+    commission_amount = round_money(sum(item.commission_amount for item in trip_items))
     wage_amount = round_money(working_days * float(assignment.daily_wage or 0))
-    commission_amount = round_money(total_transport_amount * (float(assignment.commission_percent or 0) / 100))
+    accepted = bool(assignment.driver_accepted)
+    earnings_visible = accepted or viewer_role in {"user", "admin"}
 
     return DriverAssignmentOut(
         id=assignment.id,
@@ -179,21 +292,113 @@ def serialize_assignment(db: Session, assignment: DriverAssignment) -> DriverAss
         assigned_at=assignment.assigned_at,
         completed_at=assignment.completed_at,
         daily_wage=float(assignment.daily_wage or 0),
-        commission_percent=float(assignment.commission_percent or 0),
+        commission_percent=commission_percent,
+        rates_locked=True,
         notes=assignment.notes,
         status=assignment.status,
         total_days=total_days,
         leave_days=leave_days,
         working_days=working_days,
-        total_transport_amount=total_transport_amount,
-        wage_amount=wage_amount,
-        commission_amount=commission_amount,
-        total_earning=wage_amount + commission_amount,
+        total_transport_amount=total_transport_amount if earnings_visible else 0,
+        wage_amount=wage_amount if earnings_visible else 0,
+        commission_amount=commission_amount if earnings_visible else 0,
+        total_earning=(wage_amount + commission_amount) if earnings_visible else 0,
+        gap_days_before=gap_days_before if gap_days_before is not None else assignment_gap_days_before(db, assignment),
+        is_current_stint=is_current_stint,
+        driver_accepted=accepted,
+        driver_accepted_at=assignment.driver_accepted_at,
+        earnings_visible=earnings_visible,
+        trips=trip_items if earnings_visible else [],
         leaves=[
             DriverAssignmentLeaveOut.model_validate(leave)
             for leave in sorted(assignment.leaves, key=lambda item: item.leave_start)
         ],
         created_by=assignment.created_by,
+    )
+
+
+def notification_recipient(ctx: dict) -> str | None:
+    role = ctx.get("role")
+    if role == "admin":
+        owner = (ctx.get("owner") or "").strip()
+        return owner.lower() if owner else None
+    if role == "user":
+        owner = (ctx.get("owner") or "").strip()
+        return owner.lower() if owner else None
+    return None
+
+
+def create_notification(
+    db: Session,
+    recipient: str,
+    event_type: str,
+    title: str,
+    message: str,
+    *,
+    driver_id: int | None = None,
+    related_type: str | None = None,
+    related_id: int | None = None,
+) -> None:
+    clean_recipient = (recipient or "").strip().lower()
+    if not clean_recipient:
+        return
+    db.add(
+        Notification(
+            recipient=clean_recipient,
+            driver_id=driver_id,
+            event_type=event_type,
+            title=title,
+            message=message,
+            related_type=related_type,
+            related_id=related_id,
+            is_read=False,
+            created_at=datetime.utcnow(),
+        )
+    )
+
+
+def notify_driver_owner(
+    db: Session,
+    driver_id: int,
+    event_type: str,
+    title: str,
+    message: str,
+    *,
+    related_type: str | None = None,
+    related_id: int | None = None,
+) -> None:
+    driver = db.query(Driver).filter(Driver.id == driver_id).first()
+    if not driver or not driver.created_by:
+        return
+    create_notification(
+        db,
+        driver.created_by,
+        event_type,
+        title,
+        message,
+        driver_id=driver_id,
+        related_type=related_type,
+        related_id=related_id,
+    )
+
+
+def serialize_notification(db: Session, item: Notification) -> NotificationOut:
+    driver_name = None
+    if item.driver_id:
+        driver = db.query(Driver).filter(Driver.id == item.driver_id).first()
+        driver_name = driver.name if driver else None
+    return NotificationOut(
+        id=item.id,
+        recipient=item.recipient,
+        driver_id=item.driver_id,
+        driver_name=driver_name,
+        event_type=item.event_type,
+        title=item.title,
+        message=item.message,
+        related_type=item.related_type,
+        related_id=item.related_id,
+        is_read=bool(item.is_read),
+        created_at=item.created_at,
     )
 
 
@@ -430,10 +635,44 @@ def ensure_driver_assignment_columns() -> None:
             "daily_wage": "FLOAT DEFAULT 0",
             "commission_percent": "FLOAT DEFAULT 0",
             "notes": "TEXT",
+            "driver_accepted": "BOOLEAN DEFAULT 0",
+            "driver_accepted_at": "DATETIME",
         }
         for column, ddl in column_defs.items():
             if column not in existing_columns:
                 conn.execute(text(f"ALTER TABLE driver_assignments ADD COLUMN {column} {ddl}"))
+        conn.execute(
+            text(
+                "UPDATE driver_assignments SET driver_accepted = 1 "
+                "WHERE status = 'Completed' AND (driver_accepted IS NULL OR driver_accepted = 0)"
+            )
+        )
+
+
+def ensure_notification_table() -> None:
+    if engine.dialect.name != "sqlite":
+        return
+    with engine.begin() as conn:
+        conn.execute(
+            text(
+                """
+                CREATE TABLE IF NOT EXISTS notifications (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    recipient TEXT NOT NULL,
+                    driver_id INTEGER,
+                    event_type TEXT NOT NULL,
+                    title TEXT NOT NULL,
+                    message TEXT NOT NULL,
+                    related_type TEXT,
+                    related_id INTEGER,
+                    is_read BOOLEAN NOT NULL DEFAULT 0,
+                    created_at DATETIME NOT NULL
+                )
+                """
+            )
+        )
+        conn.execute(text("CREATE INDEX IF NOT EXISTS ix_notifications_recipient ON notifications (recipient)"))
+        conn.execute(text("CREATE INDEX IF NOT EXISTS ix_notifications_driver_id ON notifications (driver_id)"))
 
 
 def ensure_user_account_driver_column() -> None:
@@ -553,6 +792,7 @@ def startup_seed():
     ensure_created_by_columns()
     ensure_active_status_columns()
     ensure_driver_assignment_columns()
+    ensure_notification_table()
     ensure_user_profile_columns()
     ensure_user_account_driver_column()
     ensure_default_users()
@@ -932,6 +1172,20 @@ def create_driver(
     db.commit()
     db.refresh(driver)
 
+    owner = driver.created_by
+    if owner:
+        create_notification(
+            db,
+            owner,
+            "driver_created",
+            "New driver added",
+            f"Driver {driver.name} was added to your fleet. Login ID: {login_identifier}.",
+            driver_id=driver.id,
+            related_type="driver",
+            related_id=driver.id,
+        )
+        db.commit()
+
     base = serialize_driver(driver, db)
     message = f"Driver {driver.name} created successfully."
     return DriverCreateOut(
@@ -977,9 +1231,105 @@ def update_driver_status(
     if not driver:
         raise HTTPException(status_code=404, detail="Driver not found")
     driver.is_active = payload.is_active
+    if not payload.is_active:
+        complete_active_assignments_for_driver(db, driver.id, datetime.utcnow())
     db.commit()
     db.refresh(driver)
     return serialize_driver(driver, db)
+
+
+def delete_driver_and_related(
+    db: Session,
+    driver: Driver,
+    viewer: str | None,
+    role: str | None,
+    scope_user: str | None,
+) -> str:
+    driver_id = driver.id
+    driver_name = driver.name
+
+    active_trip = (
+        scoped_query(db.query(Trip), Trip, db, viewer, role, scope_user)
+        .filter(
+            Trip.driver_id == driver_id,
+            Trip.status.notin_(["Delivered", "Trip Done"]),
+        )
+        .first()
+    )
+    if active_trip:
+        raise HTTPException(
+            status_code=400,
+            detail="Cannot delete driver with an active trip. Complete or reassign the trip first.",
+        )
+
+    complete_active_assignments_for_driver(db, driver_id, datetime.utcnow())
+
+    trip_ids = [
+        trip.id
+        for trip in scoped_query(db.query(Trip), Trip, db, viewer, role, scope_user)
+        .filter(Trip.driver_id == driver_id)
+        .all()
+    ]
+    if trip_ids:
+        db.query(Expense).filter(Expense.trip_id.in_(trip_ids)).delete(synchronize_session=False)
+        db.query(Trip).filter(Trip.id.in_(trip_ids)).delete(synchronize_session=False)
+
+    assignment_ids = [
+        item.id for item in db.query(DriverAssignment).filter(DriverAssignment.driver_id == driver_id).all()
+    ]
+    if assignment_ids:
+        db.query(DriverAssignmentLeave).filter(
+            DriverAssignmentLeave.assignment_id.in_(assignment_ids)
+        ).delete(synchronize_session=False)
+        db.query(DriverAssignment).filter(DriverAssignment.id.in_(assignment_ids)).delete(synchronize_session=False)
+
+    db.query(Lorry).filter(Lorry.driver_id == driver_id).update({Lorry.driver_id: None}, synchronize_session=False)
+    db.query(Notification).filter(Notification.driver_id == driver_id).delete(synchronize_session=False)
+
+    account = driver_account_for(driver_id, db)
+    if account:
+        db.query(UserProfile).filter(UserProfile.identifier == account.identifier).delete(synchronize_session=False)
+        db.delete(account)
+
+    owner = driver.created_by
+    db.delete(driver)
+    db.flush()
+
+    if owner:
+        create_notification(
+            db,
+            owner,
+            "driver_deleted",
+            "Driver removed",
+            f"Driver {driver_name} was removed from your fleet.",
+            related_type="driver",
+            related_id=driver_id,
+        )
+
+    return driver_name
+
+
+@app.delete("/drivers/{driver_id}")
+def delete_driver(
+    driver_id: int,
+    viewer: str | None = None,
+    role: str | None = None,
+    scope_user: str | None = None,
+    db: Session = Depends(get_db),
+):
+    ctx = build_auth_context(db, viewer, role, scope_user)
+    if ctx["role"] not in {"user", "admin"}:
+        raise HTTPException(status_code=403, detail="Only fleet owners can delete drivers")
+    if ctx["role"] == "admin" and not ctx["owner"]:
+        raise HTTPException(status_code=400, detail="Select a user before deleting drivers")
+
+    driver = scoped_query(db.query(Driver), Driver, db, viewer, role, scope_user).filter(Driver.id == driver_id).first()
+    if not driver:
+        raise HTTPException(status_code=404, detail="Driver not found")
+
+    driver_name = delete_driver_and_related(db, driver, viewer, role, scope_user)
+    db.commit()
+    return {"ok": True, "message": f"Driver {driver_name} deleted successfully."}
 
 
 @app.get("/drivers/{driver_id}/history", response_model=DriverHistoryOut)
@@ -1046,6 +1396,16 @@ def get_driver_history(
                 "completed_at": trip.completed_at,
             }
         )
+    assignments = (
+        scoped_query(db.query(DriverAssignment), DriverAssignment, db, viewer, role, scope_user)
+        .filter(DriverAssignment.driver_id == driver_id)
+        .order_by(DriverAssignment.assigned_at.desc())
+        .all()
+    )
+    assignment_items = serialize_assignments_list(db, assignments, role)
+    total_assignment_wage = round_money(sum(item.wage_amount for item in assignment_items))
+    total_assignment_commission = round_money(sum(item.commission_amount for item in assignment_items))
+    total_assignment_earning = round_money(sum(item.total_earning for item in assignment_items))
     return DriverHistoryOut(
         driver_id=driver.id,
         driver_name=driver.name,
@@ -1056,8 +1416,77 @@ def get_driver_history(
         total_commission_amount=total_commission_amount,
         total_driver_earning=total_driver_earning,
         total_company_net=total_company_net,
+        total_assignment_wage=total_assignment_wage,
+        total_assignment_commission=total_assignment_commission,
+        total_assignment_earning=total_assignment_earning,
+        assignments=assignment_items,
         trips=history_items,
     )
+
+
+@app.get("/notifications", response_model=List[NotificationOut])
+def list_notifications(
+    viewer: str | None = None,
+    role: str | None = None,
+    scope_user: str | None = None,
+    db: Session = Depends(get_db),
+):
+    ctx = build_auth_context(db, viewer, role, scope_user)
+    recipient = notification_recipient(ctx)
+    if not recipient:
+        raise HTTPException(status_code=403, detail="Notifications are available to fleet users only")
+    items = (
+        db.query(Notification)
+        .filter(Notification.recipient == recipient)
+        .order_by(Notification.created_at.desc(), Notification.id.desc())
+        .limit(100)
+        .all()
+    )
+    return [serialize_notification(db, item) for item in items]
+
+
+@app.patch("/notifications/{notification_id}/read", response_model=NotificationOut)
+def mark_notification_read(
+    notification_id: int,
+    viewer: str | None = None,
+    role: str | None = None,
+    scope_user: str | None = None,
+    db: Session = Depends(get_db),
+):
+    ctx = build_auth_context(db, viewer, role, scope_user)
+    recipient = notification_recipient(ctx)
+    if not recipient:
+        raise HTTPException(status_code=403, detail="Notifications are available to fleet users only")
+    item = (
+        db.query(Notification)
+        .filter(Notification.id == notification_id, Notification.recipient == recipient)
+        .first()
+    )
+    if not item:
+        raise HTTPException(status_code=404, detail="Notification not found")
+    item.is_read = True
+    db.commit()
+    db.refresh(item)
+    return serialize_notification(db, item)
+
+
+@app.post("/notifications/read-all")
+def mark_all_notifications_read(
+    viewer: str | None = None,
+    role: str | None = None,
+    scope_user: str | None = None,
+    db: Session = Depends(get_db),
+):
+    ctx = build_auth_context(db, viewer, role, scope_user)
+    recipient = notification_recipient(ctx)
+    if not recipient:
+        raise HTTPException(status_code=403, detail="Notifications are available to fleet users only")
+    db.query(Notification).filter(Notification.recipient == recipient, Notification.is_read.is_(False)).update(
+        {"is_read": True},
+        synchronize_session=False,
+    )
+    db.commit()
+    return {"ok": True}
 
 
 @app.get("/driver-assignments", response_model=List[DriverAssignmentOut])
@@ -1067,7 +1496,27 @@ def list_driver_assignments(viewer: str | None = None, role: str | None = None, 
         .order_by(DriverAssignment.assigned_at.desc())
         .all()
     )
-    return [serialize_assignment(db, assignment) for assignment in assignments]
+    return serialize_assignments_list(db, assignments, role)
+
+
+@app.get("/drivers/{driver_id}/assignments", response_model=List[DriverAssignmentOut])
+def list_driver_assignments_for_driver(
+    driver_id: int,
+    viewer: str | None = None,
+    role: str | None = None,
+    scope_user: str | None = None,
+    db: Session = Depends(get_db),
+):
+    driver = scoped_query(db.query(Driver), Driver, db, viewer, role, scope_user).filter(Driver.id == driver_id).first()
+    if not driver:
+        raise HTTPException(status_code=404, detail="Driver not found")
+    assignments = (
+        scoped_query(db.query(DriverAssignment), DriverAssignment, db, viewer, role, scope_user)
+        .filter(DriverAssignment.driver_id == driver_id)
+        .order_by(DriverAssignment.assigned_at.desc())
+        .all()
+    )
+    return serialize_assignments_list(db, assignments, role)
 
 
 @app.post("/driver-assignments", response_model=DriverAssignmentOut)
@@ -1092,6 +1541,11 @@ def create_driver_assignment(
     if existing:
         existing.status = "Completed"
         existing.completed_at = assignment_time
+        lorry = scoped_query(db.query(Lorry), Lorry, db, viewer, role, scope_user).filter(Lorry.id == existing.lorry_id).first()
+        if lorry and lorry.driver_id == existing.driver_id:
+            lorry.driver_id = None
+
+    complete_active_assignments_for_driver(db, payload.driver_id, assignment_time)
 
     assignment = DriverAssignment(
         lorry_id=payload.lorry_id,
@@ -1101,13 +1555,86 @@ def create_driver_assignment(
         commission_percent=float(payload.commission_percent or 0),
         notes=payload.notes,
         status="Active",
+        driver_accepted=False,
         created_by=write_owner(db, viewer, role, scope_user),
     )
     lorry.driver_id = payload.driver_id
     db.add(assignment)
+    db.flush()
+    notify_driver_owner(
+        db,
+        driver.id,
+        "assignment_pending",
+        "Assignment awaiting driver acceptance",
+        f"{driver.name} was assigned to lorry {lorry.vehicle_number}. Daily wage Rs {float(payload.daily_wage or 0):.0f}, commission {float(payload.commission_percent or 6):.0f}%. Waiting for driver to accept.",
+        related_type="assignment",
+        related_id=assignment.id,
+    )
     db.commit()
     db.refresh(assignment)
-    return serialize_assignment(db, assignment)
+    return serialize_assignment(
+        db,
+        assignment,
+        role,
+        is_current_stint=assignment.status == "Active",
+        gap_days_before=assignment_gap_days_before(db, assignment),
+    )
+
+
+@app.post("/driver-assignments/{assignment_id}/accept", response_model=DriverAssignmentOut)
+def accept_driver_assignment(
+    assignment_id: int,
+    viewer: str | None = None,
+    role: str | None = None,
+    scope_user: str | None = None,
+    db: Session = Depends(get_db),
+):
+    ctx = build_auth_context(db, viewer, role, scope_user)
+    if ctx["role"] != "driver" or not ctx.get("driver_id"):
+        raise HTTPException(status_code=403, detail="Only the assigned driver can accept")
+
+    assignment = (
+        scoped_query(db.query(DriverAssignment), DriverAssignment, db, viewer, role, scope_user)
+        .filter(DriverAssignment.id == assignment_id)
+        .first()
+    )
+    if not assignment:
+        raise HTTPException(status_code=404, detail="Assignment not found")
+    if assignment.driver_id != ctx["driver_id"]:
+        raise HTTPException(status_code=403, detail="This assignment is not yours")
+    if assignment.status != "Active":
+        raise HTTPException(status_code=400, detail="Only active assignments can be accepted")
+    if assignment.driver_accepted:
+        return serialize_assignment(
+        db,
+        assignment,
+        role,
+        is_current_stint=assignment.status == "Active",
+        gap_days_before=assignment_gap_days_before(db, assignment),
+    )
+
+    assignment.driver_accepted = True
+    assignment.driver_accepted_at = datetime.utcnow()
+    driver = db.query(Driver).filter(Driver.id == assignment.driver_id).first()
+    lorry = db.query(Lorry).filter(Lorry.id == assignment.lorry_id).first()
+    notify_driver_owner(
+        db,
+        assignment.driver_id,
+        "assignment_accepted",
+        "Driver accepted assignment",
+        f"{driver.name if driver else 'Driver'} accepted the assignment on lorry {lorry.vehicle_number if lorry else assignment.lorry_id}. Earnings are now visible to the driver.",
+        related_type="assignment",
+        related_id=assignment.id,
+    )
+    db.commit()
+    db.refresh(assignment)
+    return serialize_assignment(
+        db,
+        assignment,
+        role,
+        is_current_stint=assignment.status == "Active",
+        gap_days_before=assignment_gap_days_before(db, assignment),
+    )
 
 
 @app.patch("/driver-assignments/{assignment_id}/complete", response_model=DriverAssignmentOut)
@@ -1134,7 +1661,13 @@ def complete_driver_assignment(
         lorry.driver_id = None
     db.commit()
     db.refresh(assignment)
-    return serialize_assignment(db, assignment)
+    return serialize_assignment(
+        db,
+        assignment,
+        role,
+        is_current_stint=assignment.status == "Active",
+        gap_days_before=assignment_gap_days_before(db, assignment),
+    )
 
 
 @app.post("/driver-assignments/{assignment_id}/leaves", response_model=DriverAssignmentOut)
@@ -1166,7 +1699,13 @@ def add_driver_assignment_leave(
     db.add(leave)
     db.commit()
     db.refresh(assignment)
-    return serialize_assignment(db, assignment)
+    return serialize_assignment(
+        db,
+        assignment,
+        role,
+        is_current_stint=assignment.status == "Active",
+        gap_days_before=assignment_gap_days_before(db, assignment),
+    )
 
 
 @app.patch("/driver-assignments/{assignment_id}", response_model=DriverAssignmentOut)
@@ -1186,6 +1725,11 @@ def update_driver_assignment(
     if not assignment:
         raise HTTPException(status_code=404, detail="Assignment not found")
 
+    if payload.assigned_at is not None:
+        assignment.assigned_at = payload.assigned_at
+    if payload.notes is not None:
+        assignment.notes = payload.notes
+
     if payload.driver_id is not None:
         driver = scoped_query(db.query(Driver), Driver, db, viewer, role, scope_user).filter(Driver.id == payload.driver_id).first()
         if not driver:
@@ -1198,22 +1742,19 @@ def update_driver_assignment(
             raise HTTPException(status_code=404, detail="Lorry not found")
         assignment.lorry_id = payload.lorry_id
 
-    if payload.assigned_at is not None:
-        assignment.assigned_at = payload.assigned_at
-    if payload.daily_wage is not None:
-        assignment.daily_wage = float(payload.daily_wage or 0)
-    if payload.commission_percent is not None:
-        assignment.commission_percent = float(payload.commission_percent or 0)
-    if payload.notes is not None:
-        assignment.notes = payload.notes
-
     lorry = scoped_query(db.query(Lorry), Lorry, db, viewer, role, scope_user).filter(Lorry.id == assignment.lorry_id).first()
     if lorry:
         lorry.driver_id = assignment.driver_id
 
     db.commit()
     db.refresh(assignment)
-    return serialize_assignment(db, assignment)
+    return serialize_assignment(
+        db,
+        assignment,
+        role,
+        is_current_stint=assignment.status == "Active",
+        gap_days_before=assignment_gap_days_before(db, assignment),
+    )
 
 
 @app.post("/lorries", response_model=LorryOut)
@@ -1321,6 +1862,17 @@ def create_trip(payload: TripCreate, viewer: str | None = None, role: str | None
     db.add(trip)
     db.commit()
     db.refresh(trip)
+    if ctx["role"] == "driver":
+        notify_driver_owner(
+            db,
+            trip.driver_id,
+            "driver_trip_created",
+            f"Driver created trip #{trip.id}",
+            f"{driver.name}: {trip.load_location} → {trip.unload_location} ({trip.status}).",
+            related_type="trip",
+            related_id=trip.id,
+        )
+        db.commit()
     total_expenses, net_profit = trip_totals(db, trip)
     return TripOut(**trip.__dict__, total_expenses=total_expenses, net_profit=net_profit)
 
@@ -1424,6 +1976,16 @@ def update_trip(
     if not payload.model_dump(exclude_unset=True):
         raise HTTPException(status_code=400, detail="No trip fields to update")
     apply_trip_update(trip, payload)
+    if role == "driver":
+        notify_driver_owner(
+            db,
+            trip.driver_id,
+            "driver_trip_update",
+            f"Driver updated trip #{trip.id}",
+            f"{trip.load_location} → {trip.unload_location}: trip details updated.",
+            related_type="trip",
+            related_id=trip.id,
+        )
     db.commit()
     db.refresh(trip)
     total_expenses, net_profit = trip_totals(db, trip)
@@ -1444,6 +2006,27 @@ def update_trip_status(
         raise HTTPException(status_code=404, detail="Trip not found")
 
     apply_trip_save(db, trip, payload, viewer, role, scope_user)
+    if role == "driver":
+        changes = []
+        data = payload.model_dump(exclude_unset=True)
+        if "status" in data:
+            changes.append(f"status → {data['status']}")
+        if "loading_date" in data:
+            changes.append(f"loading date → {data['loading_date']}")
+        if "unloading_date" in data:
+            changes.append(f"unloading date → {data['unloading_date']}")
+        if data.get("expense"):
+            changes.append("expense details updated")
+        detail = ", ".join(changes) if changes else "trip details updated"
+        notify_driver_owner(
+            db,
+            trip.driver_id,
+            "driver_trip_update",
+            f"Driver updated trip #{trip.id}",
+            f"{trip.load_location} → {trip.unload_location}: {detail}.",
+            related_type="trip",
+            related_id=trip.id,
+        )
     db.commit()
     db.refresh(trip)
     total_expenses, net_profit = trip_totals(db, trip)
@@ -1467,6 +2050,16 @@ def add_expense(payload: ExpenseCreate, viewer: str | None = None, role: str | N
     expense = Expense(**payload_data)
     expense.created_by = write_owner(db, viewer, role, scope_user)
     db.add(expense)
+    if role == "driver":
+        notify_driver_owner(
+            db,
+            trip.driver_id,
+            "driver_expense_update",
+            f"Driver added expense on trip #{trip.id}",
+            f"{trip.load_location} → {trip.unload_location}: expense recorded by driver.",
+            related_type="trip",
+            related_id=trip.id,
+        )
     db.commit()
     db.refresh(expense)
     return serialize_expense(expense)

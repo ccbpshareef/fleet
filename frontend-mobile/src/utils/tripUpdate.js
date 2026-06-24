@@ -17,6 +17,10 @@ export function buildTripUpdatePayload(trip, { status, loadingDate, unloadingDat
   const expensePayload = expenseDraft ? buildExpenseUpdatePayload(expenses, expenseDraft) : null;
   if (expensePayload) payload.expense = expensePayload;
 
+  if (Object.keys(payload).length > 0 && payload.status === undefined) {
+    payload.status = trip.status || "Loading";
+  }
+
   return payload;
 }
 

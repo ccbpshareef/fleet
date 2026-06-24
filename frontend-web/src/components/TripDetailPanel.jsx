@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
 import { TRIP_STATUSES, tripStatusLabel } from "../utils/fleetLabels";
-import { EXPENSE_EDIT_FIELDS } from "../utils/tripExpenseEdit";
+import { expenseFieldsForRole } from "../utils/tripExpenseEdit";
 import { buildTripUpdatePayload, expenseDraftFromTotals, toDateInputValue } from "../utils/tripUpdate";
+import { tripDriverEarning } from "../utils/driverEarnings";
 
 function formatCurrency(value) {
   return `Rs ${Number(value || 0).toFixed(2)}`;
@@ -24,9 +25,13 @@ export default function TripDetailPanel({
   drivers,
   lorries,
   language = "en",
+  userRole = "user",
   onUpdateTrip
 }) {
   const t = (en, te) => (language === "te" ? te : en);
+  const isDriver = userRole === "driver";
+  const visibleExpenseFields = expenseFieldsForRole(userRole);
+  const myEarning = tripDriverEarning(expenses);
   const [isEditing, setIsEditing] = useState(false);
   const [statusDraft, setStatusDraft] = useState(trip?.status || "Loading");
   const [loadingDateDraft, setLoadingDateDraft] = useState("");
@@ -88,7 +93,7 @@ export default function TripDetailPanel({
     <div className="panel trip-detail-panel">
       <div className="section-head trip-detail-head">
         <div>
-          <h3>{t("Complete Trip Details", "పూర్తి ట్రిప్ వివరాలు")}</h3>
+          <h3>{isDriver ? t("My Trip Details", "నా ట్రిప్ వివరాలు") : t("Complete Trip Details", "పూర్తి ట్రిప్ వివరాలు")}</h3>
           <p className="muted">
             {trip.load_location} → {trip.unload_location}
           </p>
@@ -152,20 +157,29 @@ export default function TripDetailPanel({
           <span>{t("Completed On", "పూర్తి అయిన తేదీ")}</span>
           <strong>{trip.completed_at ? new Date(trip.completed_at).toLocaleString() : "-"}</strong>
         </div>
-        <div className="detail-card">
-          <span>{t("Load Price", "లోడ్ ధర")}</span>
-          <strong>{formatCurrency(Number(trip.load_price || 0))}</strong>
-        </div>
-        <div className="detail-card">
-          <span>{t("Total Expenses", "మొత్తం ఖర్చులు")}</span>
-          <strong>{formatCurrency(Number(trip.total_expenses || 0))}</strong>
-        </div>
-        <div className="detail-card">
-          <span>{t("Net Profit", "నికర లాభం")}</span>
-          <strong className={Number(trip.net_profit || 0) >= 0 ? "profit" : "loss"}>
-            {formatCurrency(Number(trip.net_profit || 0))}
-          </strong>
-        </div>
+        {isDriver ? (
+          <div className="detail-card">
+            <span>{t("My Earning", "నా సంపాదన")}</span>
+            <strong className="profit">{formatCurrency(myEarning)}</strong>
+          </div>
+        ) : (
+          <>
+            <div className="detail-card">
+              <span>{t("Load Price", "లోడ్ ధర")}</span>
+              <strong>{formatCurrency(Number(trip.load_price || 0))}</strong>
+            </div>
+            <div className="detail-card">
+              <span>{t("Total Expenses", "మొత్తం ఖర్చులు")}</span>
+              <strong>{formatCurrency(Number(trip.total_expenses || 0))}</strong>
+            </div>
+            <div className="detail-card">
+              <span>{t("Net Profit", "నికర లాభం")}</span>
+              <strong className={Number(trip.net_profit || 0) >= 0 ? "profit" : "loss"}>
+                {formatCurrency(Number(trip.net_profit || 0))}
+              </strong>
+            </div>
+          </>
+        )}
       </div>
 
       {canUpdate && isEditing ? (
@@ -192,9 +206,9 @@ export default function TripDetailPanel({
       ) : null}
 
       <div className="expense-breakdown">
-        <h4>{t("Expense Breakdown", "ఖర్చుల విభజన")}</h4>
+        <h4>{isDriver ? t("My Earnings Breakdown", "నా సంపాదన వివరాలు") : t("Expense Breakdown", "ఖర్చుల విభజన")}</h4>
         <div className="expense-grid">
-          {EXPENSE_EDIT_FIELDS.map((field) => (
+          {visibleExpenseFields.map((field) => (
             <div className="expense-stat" key={field.key}>
               <span>{t(field.en, field.te)}</span>
               {isEditing ? (

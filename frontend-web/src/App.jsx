@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { api } from "./api";
 import DriverFilterBar from "./components/DriverFilterBar";
+import NotificationBell from "./components/NotificationBell";
 import MobileWorkspace from "./components/MobileWorkspace";
 import PeriodFilterBar from "./components/PeriodFilterBar";
 import useIsMobile from "./hooks/useIsMobile";
@@ -26,6 +27,7 @@ import {
   getDriversInPeriod,
   getPeriodLabel
 } from "./utils/periodFilter";
+import { computeAssignmentPaySummary, computeDriverEarningsSummary } from "./utils/driverEarnings";
 import { roundMoney } from "./utils/money";
 
 const adminNavItems = [
@@ -195,12 +197,14 @@ export default function App() {
     return window.innerWidth > 860;
   });
   const [driverAssignments, setDriverAssignments] = useState([]);
+  const [notifications, setNotifications] = useState([]);
+  const [showNotifications, setShowNotifications] = useState(false);
   const [assignmentForm, setAssignmentForm] = useState({
     lorry_id: "",
     driver_id: "",
     assigned_at: "",
     daily_wage: "",
-    commission_percent: "",
+    commission_percent: "6",
     notes: ""
   });
   const [newDriver, setNewDriver] = useState({
@@ -254,13 +258,16 @@ export default function App() {
   }, [authUser, selectedScopeUser]);
 
   async function loadData() {
-    const [dash, dr, lo, tr, ex, asg] = await Promise.all([
+    const canLoadNotifications =
+      authQuery?.role === "user" || (authQuery?.role === "admin" && authQuery?.scope_user);
+    const [dash, dr, lo, tr, ex, asg, notif] = await Promise.all([
       api.getDashboard(authQuery),
       api.getDrivers(authQuery),
       api.getLorries(authQuery),
       api.getTrips(authQuery),
       api.getExpenses(authQuery),
-      api.getDriverAssignments(authQuery)
+      api.getDriverAssignments(authQuery),
+      canLoadNotifications ? api.getNotifications(authQuery).catch(() => []) : Promise.resolve([])
     ]);
     setDashboard(dash);
     setDrivers(dr);
@@ -268,6 +275,7 @@ export default function App() {
     setTrips(tr);
     setExpenses(ex);
     setDriverAssignments(asg);
+    setNotifications(notif || []);
   }
 
   const expenseTotalsByTrip = expenses.reduce((acc, item) => {
@@ -312,6 +320,10 @@ export default function App() {
   const filteredDashboard = useMemo(
     () => computeDashboardFromTrips(filteredTrips, lorries, drivers),
     [filteredTrips, lorries, drivers]
+  );
+  const driverEarningsSummary = useMemo(
+    () => computeDriverEarningsSummary(filteredTrips, expenseTotalsByTrip),
+    [filteredTrips, expenseTotalsByTrip]
   );
   const filteredAssignments = useMemo(() => {
     if (!driverFilterId) return driverAssignments;
@@ -428,6 +440,28 @@ export default function App() {
       await openDriverDetail({ ...driver, is_active: !driver.is_active });
     }
     await loadData();
+  }
+
+  async function deleteDriver(driver) {
+    if (authUser?.role !== "user") return;
+    const confirmMsg =
+      language === "te"
+        ? `${driver.name} ను తొలగించాలా? ఈ డ్రైవర్ ట్రిప్ చరిత్ర, అసైన్‌మెంట్లు మరియు లాగిన్ కూడా తొలగించబడతాయి.`
+        : `Delete ${driver.name}? Their trip history, assignments, and login will also be removed.`;
+    if (!window.confirm(confirmMsg)) return;
+    try {
+      await api.deleteDriver(driver.id, authQuery);
+      if (selectedDriver?.id === driver.id) {
+        closeDriverDetail();
+      }
+      await loadData();
+    } catch (error) {
+      const msg = parseApiDetail(
+        error,
+        language === "te" ? "డ్రైవర్ తొలగింపు విఫలమైంది." : "Failed to delete driver."
+      );
+      alert(msg);
+    }
   }
 
   async function saveLorry(e) {
@@ -577,7 +611,7 @@ export default function App() {
       driver_id: "",
       assigned_at: "",
       daily_wage: "",
-      commission_percent: "",
+      commission_percent: "6",
       notes: ""
     });
     await loadData();
@@ -592,6 +626,23 @@ export default function App() {
   async function addAssignmentLeave(assignmentId, payload) {
     if (authUser?.role !== "user") return;
     await api.addDriverAssignmentLeave(assignmentId, payload, authQuery);
+    await loadData();
+  }
+
+  async function acceptDriverAssignment(assignmentId) {
+    if (authUser?.role !== "driver") return;
+    await api.acceptDriverAssignment(assignmentId, authQuery);
+    await loadData();
+  }
+
+  async function markNotificationRead(notification) {
+    if (!notification || notification.is_read) return;
+    await api.markNotificationRead(notification.id, authQuery);
+    await loadData();
+  }
+
+  async function markAllNotificationsRead() {
+    await api.markAllNotificationsRead(authQuery);
     await loadData();
   }
 
@@ -832,6 +883,7 @@ export default function App() {
           onAddAssignmentLeave={addAssignmentLeave}
           onCompleteAssignment={completeAssignment}
           onToggleDriverStatus={toggleDriverStatus}
+          onDeleteDriver={deleteDriver}
           language={language}
           lastCreated={lastDriverCreated}
           onDismissCreated={() => setLastDriverCreated(null)}
@@ -847,6 +899,9 @@ export default function App() {
           trips={filteredTrips}
           language={language}
           periodFilter={periodFilter}
+          userRole={authUser?.role}
+          expenseTotalsByTrip={expenseTotalsByTrip}
+          notifications={notifications}
         />
       );
     }
@@ -860,6 +915,7 @@ export default function App() {
           language={language}
           expenseTotalsByTrip={expenseTotalsByTrip}
           periodFilter={periodFilter}
+          userRole={authUser?.role}
           onUpdateTrip={updateTrip}
         />
       );
@@ -930,6 +986,9 @@ export default function App() {
         periodFilter={periodFilter}
         userName={profileForm.full_name || profile?.full_name || authUser?.identifier}
         userRole={authUser?.role}
+        driverAssignments={driverAssignments}
+        driverId={authUser?.driver_id}
+        onAcceptAssignment={acceptDriverAssignment}
         onUpdateTrip={updateTrip}
       />
     );
@@ -1001,6 +1060,7 @@ export default function App() {
             onAddAssignmentLeave={addAssignmentLeave}
             onCompleteAssignment={completeAssignment}
             onToggleDriverStatus={toggleDriverStatus}
+            onDeleteDriver={deleteDriver}
             language={language}
             lastCreated={lastDriverCreated}
             onDismissCreated={() => setLastDriverCreated(null)}
@@ -1032,6 +1092,7 @@ export default function App() {
           language={language}
           expenseTotalsByTrip={expenseTotalsByTrip}
           periodFilter={periodFilter}
+          userRole={authUser?.role}
           onUpdateTrip={updateTrip}
         />
       );
@@ -1067,6 +1128,9 @@ export default function App() {
         periodFilter={periodFilter}
         userName={profileForm.full_name || profile?.full_name || authUser?.identifier}
         userRole={authUser?.role}
+        driverAssignments={driverAssignments}
+        driverId={authUser?.driver_id}
+        onAcceptAssignment={acceptDriverAssignment}
       />
     );
   }
@@ -1102,26 +1166,48 @@ export default function App() {
     day: "numeric",
     month: "short"
   });
-  const mobileHeaderStats = [
-    { label: tMobileTab("Fleet"), value: filteredDashboard?.total_lorries ?? lorries.length },
-    { label: tMobileTab("Trips Live"), value: mobileActiveTripCount },
-    { label: tMobileTab("Drivers"), value: driversForFilter.length || drivers.length }
-  ];
-  const workspaceMetrics = [
-    { label: "Fleet", value: dashboard?.total_lorries ?? lorries.length },
-    { label: "Trips Live", value: desktopActiveTripCount },
-    { label: "Drivers", value: drivers.length }
-  ];
+  const mobileHeaderStats =
+    authUser?.role === "driver"
+      ? [
+          { label: tMobileTab("Trips"), value: driverEarningsSummary.tripCount },
+          { label: language === "te" ? "సంపాదన" : "Earnings", value: `Rs ${driverEarningsSummary.totalEarning.toFixed(0)}` },
+          { label: tMobileTab("Trips Live"), value: driverEarningsSummary.activeTripCount }
+        ]
+      : [
+          { label: tMobileTab("Fleet"), value: filteredDashboard?.total_lorries ?? lorries.length },
+          { label: tMobileTab("Trips Live"), value: mobileActiveTripCount },
+          { label: tMobileTab("Drivers"), value: driversForFilter.length || drivers.length }
+        ];
+  const workspaceMetrics =
+    authUser?.role === "driver"
+      ? [
+          { label: language === "te" ? "నా ట్రిప్స్" : "My Trips", value: driverEarningsSummary.tripCount },
+          { label: language === "te" ? "సంపాదన" : "Earnings", value: `Rs ${driverEarningsSummary.totalEarning.toFixed(0)}` },
+          { label: language === "te" ? "లైవ్" : "Live", value: driverEarningsSummary.activeTripCount }
+        ]
+      : [
+          { label: "Fleet", value: dashboard?.total_lorries ?? lorries.length },
+          { label: "Trips Live", value: desktopActiveTripCount },
+          { label: "Drivers", value: drivers.length }
+        ];
   const workspaceDate = new Date().toLocaleDateString("en-IN", {
     weekday: "long",
     day: "numeric",
     month: "long",
     year: "numeric"
   });
-  const pageDescription = pageDescriptions[activePage] || "Stay on top of fleet operations from a single workspace.";
+  const pageDescription =
+    authUser?.role === "driver" && (activePage === "Dashboard" || activeMobileTab === "Dashboard")
+      ? language === "te"
+        ? "ఎంచుకున్న కాలంలో మీ ట్రిప్ సంపాదనను చూడండి."
+        : "See your trip earnings for the selected period."
+      : pageDescriptions[activePage] || "Stay on top of fleet operations from a single workspace.";
   const userDisplayName = profile?.full_name || authUser?.identifier || "User";
   const profileInitial = userDisplayName.charAt(0).toUpperCase();
   const profileImageUrl = profile?.profile_image_url || profileForm.profile_image_url || "";
+  const showUserNotifications =
+    authUser?.role === "user" || (authUser?.role === "admin" && selectedScopeUser);
+  const unreadNotificationCount = notifications.filter((item) => !item.is_read).length;
 
   async function handleProfileImageUpload(event) {
     const file = event.target.files?.[0];
@@ -1341,6 +1427,11 @@ export default function App() {
     <span className="profile-incomplete-dot" aria-hidden="true" title={language === "te" ? "ప్రొఫైల్ పూర్తి చేయండి" : "Complete your profile"} />
   ) : null;
 
+  const selectedDriverStintPay = useMemo(() => {
+    if (!selectedDriver) return null;
+    return computeAssignmentPaySummary(driverAssignments, { driverId: selectedDriver.id });
+  }, [selectedDriver, driverAssignments]);
+
   const driverDetailModal = selectedDriver ? (
     <div
       className="driver-detail-modal-overlay"
@@ -1354,9 +1445,20 @@ export default function App() {
       <section className="driver-detail-modal" onClick={(event) => event.stopPropagation()}>
         <div className="driver-detail-modal-head">
           <h3>{language === "te" ? "డ్రైవర్ వివరాలు" : "Driver Detail"}</h3>
-          <button type="button" className="ghost driver-detail-close-btn" onClick={closeDriverDetail}>
-            {language === "te" ? "మూసివేయి" : "Close"}
-          </button>
+          <div className="driver-detail-modal-actions">
+            {authUser?.role === "user" ? (
+              <button
+                type="button"
+                className="ghost driver-delete-btn"
+                onClick={() => deleteDriver(selectedDriver)}
+              >
+                {language === "te" ? "తొలగించు" : "Delete"}
+              </button>
+            ) : null}
+            <button type="button" className="ghost driver-detail-close-btn" onClick={closeDriverDetail}>
+              {language === "te" ? "మూసివేయి" : "Close"}
+            </button>
+          </div>
         </div>
         <p className="section-kicker" style={{ marginTop: 8 }}>
           {language === "te" ? "డ్రైవర్ ప్రొఫైల్" : "DRIVER PROFILE"}
@@ -1365,6 +1467,20 @@ export default function App() {
         <p>{language === "te" ? "ఫోన్" : "Phone"}: {selectedDriver.phone}</p>
         <p>{language === "te" ? "లైసెన్స్" : "License"}: {selectedDriver.license_number || na(language)}</p>
         <p>{language === "te" ? "స్థితి" : "Status"}: {activeLabel(language, selectedDriver.is_active)}</p>
+        {selectedDriverStintPay?.currentStint ? (
+          <div className="assignment-highlight-card" style={{ marginTop: 12 }}>
+            <h4>{language === "te" ? "ప్రస్తుత పని చెల్లింపు" : "Current Stint Pay"}</h4>
+            <p>
+              {language === "te" ? "ఈ కాలం రోజులు" : "Stint days"}: {selectedDriverStintPay.totalWorkingDays} ·{" "}
+              {language === "te" ? "చెల్లింపు" : "Pay"}: {formatMoney(language, selectedDriverStintPay.totalEarning)}
+            </p>
+            <p className="muted">
+              {language === "te"
+                ? "గ్యాప్ రోజులు చెల్లింపులో లేవు. పాత కాలాలు క్రింద చరిత్రలో."
+                : "Gap days are not paid. Past stints stay in history only."}
+            </p>
+          </div>
+        ) : null}
         {selectedDriverHistory ? (
           <>
             <p>{language === "te" ? "మొత్తం ట్రిప్స్" : "Total Trips"}: {selectedDriverHistory.total_trips}</p>
@@ -1690,6 +1806,21 @@ export default function App() {
             </div>
 
             <div className="top-profile-row" ref={profileMenuRef}>
+              {showUserNotifications ? (
+                <NotificationBell
+                  notifications={notifications}
+                  unreadCount={unreadNotificationCount}
+                  open={showNotifications}
+                  onToggle={() => {
+                    setShowNotifications((prev) => !prev);
+                    if (showProfilePanel) setShowProfilePanel(false);
+                  }}
+                  onClose={() => setShowNotifications(false)}
+                  onMarkRead={markNotificationRead}
+                  onMarkAllRead={markAllNotificationsRead}
+                  language={language}
+                />
+              ) : null}
               <button
                 type="button"
                 className={`profile-icon-btn ${needsProfileSetup ? "profile-incomplete" : ""}`}
@@ -1698,6 +1829,7 @@ export default function App() {
                     setShowProfilePanel(false);
                     return;
                   }
+                  setShowNotifications(false);
                   openProfilePanel();
                 }}
                 aria-label={

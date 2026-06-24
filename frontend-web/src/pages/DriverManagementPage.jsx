@@ -15,6 +15,7 @@ export default function DriverManagementPage({
   onAddAssignmentLeave,
   onCompleteAssignment,
   onToggleDriverStatus,
+  onDeleteDriver,
   language = "en",
   lastCreated = null,
   onDismissCreated,
@@ -85,6 +86,13 @@ export default function DriverManagementPage({
     await onCompleteAssignment(assignmentId, { completed_at });
     setCompleteForms((current) => ({ ...current, [assignmentId]: "" }));
   };
+
+  const sortedAssignments = [...assignments].sort((a, b) => {
+    if (a.is_current_stint !== b.is_current_stint) {
+      return a.is_current_stint ? -1 : 1;
+    }
+    return new Date(b.assigned_at) - new Date(a.assigned_at);
+  });
 
   return (
     <section className="panel driver-management-panel">
@@ -191,6 +199,12 @@ export default function DriverManagementPage({
 
       <div className="card driver-card">
         <h3>{t("Assign Driver to Lorry", "\u0c32\u0c3e\u0c30\u0c40\u0c15\u0c3f \u0c21\u0c4d\u0c30\u0c48\u0c35\u0c30\u0c4d \u0c15\u0c47\u0c1f\u0c3e\u0c2f\u0c3f\u0c02\u0c2a\u0c41")}</h3>
+        <p className="assignment-help-box">
+          {t(
+            "Each assignment is one work stint. When driver stops, complete the stint. After a gap (days or months), create a new assignment — pay is calculated only for that new stint (e.g. 50 days × Rs 600). Old stint days (e.g. 10 days) stay in history and are not added again.",
+            "ప్రతి అసైన్‌మెంట్ ఒక పని కాలం. డ్రైవర్ ఆగితే ఆ కాలం పూర్తి చేయండి. గ్యాప్ తర్వాత కొత్త అసైన్‌మెంట్ — చెల్లింపు కేవలం ఆ కొత్త కాలానికి (ఉదా. 50 రోజులు × Rs 600). పాత కాలం (ఉదా. 10 రోజులు) చరిత్రలో మాత్రమే ఉంటుంది, మళ్లీ కలపరు."
+          )}
+        </p>
         <div className="form-grid compact-form-grid">
           <select value={assignmentForm.lorry_id} onChange={(e) => setAssignmentForm({ ...assignmentForm, lorry_id: e.target.value })}>
             <option value="">{t("Select Lorry", "\u0c32\u0c3e\u0c30\u0c40 \u0c0e\u0c02\u0c1a\u0c41\u0c15\u0c4b\u0c02\u0c21\u0c3f")}</option>
@@ -235,6 +249,16 @@ export default function DriverManagementPage({
             >
               {driver.is_active ? t("Set Inactive", "\u0c07\u0c28\u0c3e\u0c15\u0c4d\u0c1f\u0c3f\u0c35\u0c4d \u0c1a\u0c47\u0c2f\u0c3f") : t("Set Active", "\u0c2f\u0c3e\u0c15\u0c4d\u0c1f\u0c3f\u0c35\u0c4d \u0c1a\u0c47\u0c2f\u0c3f")}
             </button>
+            <button
+              type="button"
+              className="ghost driver-delete-btn"
+              onClick={(event) => {
+                event.stopPropagation();
+                onDeleteDriver(driver);
+              }}
+            >
+              {t("Delete", "తొలగించు")}
+            </button>
           </div>
         ))}
       </div>
@@ -242,22 +266,55 @@ export default function DriverManagementPage({
       <div className="card driver-card">
         <h3>{t("Assignment Ledger", "\u0c15\u0c47\u0c1f\u0c3e\u0c2f\u0c3f\u0c02\u0c2a\u0c41 \u0c32\u0c46\u0c21\u0c4d\u0c1c\u0c30\u0c4d")}</h3>
         <div className="cards-list">
-          {assignments.map((assignment) => (
-            <div className="mini-card assignment-card" key={assignment.id}>
+          {sortedAssignments.map((assignment) => (
+            <div className={`mini-card assignment-card ${assignment.is_current_stint ? "assignment-card-current" : "assignment-card-past"}`} key={assignment.id}>
+              <p>
+                <strong>
+                  {assignment.is_current_stint
+                    ? t("Current work stint", "ప్రస్తుత పని కాలం")
+                    : t("Past work stint", "మునుపటి పని కాలం")}
+                </strong>
+              </p>
+              {assignment.gap_days_before > 0 ? (
+                <p className="muted">
+                  {t("Unpaid gap before this stint", "ఈ కాలం ముందు చెల్లించని గ్యాప్")}: {assignment.gap_days_before} {t("days", "రోజులు")}
+                </p>
+              ) : null}
               <p>{t("Lorry", "\u0c32\u0c3e\u0c30\u0c40")}: {lorries.find((l) => l.id === assignment.lorry_id)?.vehicle_number || assignment.lorry_id}</p>
               <p>{t("Driver", "\u0c21\u0c4d\u0c30\u0c48\u0c35\u0c30\u0c4d")}: {drivers.find((d) => d.id === assignment.driver_id)?.name || assignment.driver_id}</p>
               <p>{t("Start", "\u0c2a\u0c4d\u0c30\u0c3e\u0c30\u0c02\u0c2d \u0c24\u0c47\u0c26\u0c40")}: {new Date(assignment.assigned_at).toLocaleString()}</p>
               <p>{t("End", "\u0c2e\u0c41\u0c17\u0c3f\u0c02\u0c2a\u0c41 \u0c24\u0c47\u0c26\u0c40")}: {assignment.completed_at ? new Date(assignment.completed_at).toLocaleString() : "-"}</p>
               <p>{t("Status", "\u0c38\u0c4d\u0c25\u0c3f\u0c24\u0c3f")}: {assignment.status}</p>
+              {assignment.status === "Active" ? (
+                <p>
+                  {t("Driver acceptance", "డ్రైవర్ అంగీకారం")}:{" "}
+                  {assignment.driver_accepted
+                    ? t("Accepted", "అంగీకరించారు")
+                    : t("Pending", "పెండింగ్")}
+                </p>
+              ) : null}
               <p>{t("Total Days", "\u0c2e\u0c4a\u0c24\u0c4d\u0c24\u0c02 \u0c30\u0c4b\u0c1c\u0c41\u0c32\u0c41")}: {assignment.total_days}</p>
               <p>{t("Leave Days", "\u0c32\u0c40\u0c35\u0c4d \u0c30\u0c4b\u0c1c\u0c41\u0c32\u0c41")}: {assignment.leave_days}</p>
               <p>{t("Working Days", "\u0c2a\u0c28\u0c3f \u0c30\u0c4b\u0c1c\u0c41\u0c32\u0c41")}: {assignment.working_days}</p>
               <p>{t("Transport Amount", "\u0c1f\u0c4d\u0c30\u0c3e\u0c28\u0c4d\u0c38\u0c4d\u0c2a\u0c4b\u0c30\u0c4d\u0c1f\u0c4d \u0c2e\u0c4a\u0c24\u0c4d\u0c24\u0c02")}: Rs.{Number(assignment.total_transport_amount || 0).toFixed(2)}</p>
-              <p>{t("Daily Wage", "\u0c21\u0c48\u0c32\u0c40 \u0c35\u0c47\u0c24\u0c28\u0c02")}: Rs.{Number(assignment.daily_wage || 0).toFixed(2)}</p>
-              <p>{t("Wage Amount", "\u0c35\u0c47\u0c24\u0c28 \u0c2e\u0c4a\u0c24\u0c4d\u0c24\u0c02")}: Rs.{Number(assignment.wage_amount || 0).toFixed(2)}</p>
+              <p>{t("Daily Wage", "\u0c21\u0c48\u0c32\u0c40 \u0c35\u0c47\u0c24\u0c28\u0c02")}: Rs.{Number(assignment.daily_wage || 0).toFixed(2)} <span className="assignment-rate-locked">{t("locked", "\u0c32\u0c3e\u0c15\u0c4d")}</span></p>
+              <p>{t("Wage Amount", "\u0c35\u0c47\u0c24\u0c28 \u0c2e\u0c4a\u0c24\u0c4d\u0c24\u0c02")}: Rs.{Number(assignment.wage_amount || 0).toFixed(2)} ({assignment.working_days} {t("days", "\u0c30\u0c4b\u0c1c\u0c41\u0c32\u0c41")} × Rs.{Number(assignment.daily_wage || 0).toFixed(0)})</p>
               <p>{t("Commission", "\u0c15\u0c2e\u0c3f\u0c37\u0c28\u0c4d")}: {Number(assignment.commission_percent || 0).toFixed(2)}% / Rs.{Number(assignment.commission_amount || 0).toFixed(2)}</p>
               <p><strong>{t("Total Earning", "\u0c2e\u0c4a\u0c24\u0c4d\u0c24\u0c02 \u0c38\u0c02\u0c2a\u0c3e\u0c26\u0c28")}: Rs.{Number(assignment.total_earning || 0).toFixed(2)}</strong></p>
               {assignment.notes ? <p>{t("Notes", "\u0c17\u0c2e\u0c28\u0c3f\u0c15\u0c32\u0c41")}: {assignment.notes}</p> : null}
+
+              {assignment.trips?.length ? (
+                <div className="assignment-trip-table">
+                  <h4>{t("Trip-wise Commission", "\u0c1f\u0c4d\u0c30\u0c3f\u0c2a\u0c4d \u0c35\u0c3e\u0c30\u0c40 \u0c15\u0c2e\u0c3f\u0c37\u0c28\u0c4d")}</h4>
+                  {assignment.trips.map((trip) => (
+                    <div className="assignment-trip-row" key={trip.trip_id}>
+                      <span>{trip.route}</span>
+                      <span>Rs.{Number(trip.load_price || 0).toFixed(0)} × {trip.commission_percent}%</span>
+                      <strong>Rs.{Number(trip.commission_amount || 0).toFixed(2)}</strong>
+                    </div>
+                  ))}
+                </div>
+              ) : null}
 
               <div className="assignment-leave-list">
                 <h4>{t("Leave Records", "\u0c32\u0c40\u0c35\u0c4d \u0c30\u0c3f\u0c15\u0c3e\u0c30\u0c4d\u0c21\u0c4d\u0c38\u0c4d")}</h4>

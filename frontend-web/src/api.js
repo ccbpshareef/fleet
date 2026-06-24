@@ -82,10 +82,25 @@ export const api = {
       body: JSON.stringify(payload),
       query: auth
     }),
+  acceptDriverAssignment: (assignmentId, auth) =>
+    request(`/driver-assignments/${assignmentId}/accept`, { method: "POST", query: auth }),
+  getNotifications: async (auth) => {
+    try {
+      return await request("/notifications", { query: auth });
+    } catch {
+      return [];
+    }
+  },
+  markNotificationRead: (notificationId, auth) =>
+    request(`/notifications/${notificationId}/read`, { method: "PATCH", query: auth }),
+  markAllNotificationsRead: (auth) =>
+    request("/notifications/read-all", { method: "POST", query: auth }),
   createDriver: (payload, auth) =>
     request("/drivers", { method: "POST", body: JSON.stringify(payload), query: auth }),
   updateDriverStatus: (driverId, is_active, auth) =>
     request(`/drivers/${driverId}/status`, { method: "PATCH", body: JSON.stringify({ is_active }), query: auth }),
+  deleteDriver: (driverId, auth) =>
+    request(`/drivers/${driverId}`, { method: "DELETE", query: auth }),
   getDriverHistory: (driverId, auth) => request(`/drivers/${driverId}/history`, { query: auth }),
   getLorries: (auth) => request("/lorries", { query: auth }),
   createLorry: (payload, auth) =>

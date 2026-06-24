@@ -10,6 +10,14 @@ export const EXPENSE_EDIT_FIELDS = [
   { key: "other", en: "Other", te: "ఇతర" }
 ];
 
+export const DRIVER_EXPENSE_FIELDS = EXPENSE_EDIT_FIELDS.filter((field) =>
+  ["driver_bata", "driver_daily_wage", "driver_commission_amount"].includes(field.key)
+);
+
+export function expenseFieldsForRole(userRole) {
+  return userRole === "driver" ? DRIVER_EXPENSE_FIELDS : EXPENSE_EDIT_FIELDS;
+}
+
 export function emptyExpenseDraft() {
   return {
     diesel: "",

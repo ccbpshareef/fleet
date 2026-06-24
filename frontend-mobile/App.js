@@ -28,6 +28,7 @@ import {
 } from "./src/utils/periodFilter";
 import { buildExpenseTotalsByTrip } from "./src/utils/expenseTotals";
 import { roundMoney } from "./src/utils/money";
+import { computeDriverEarningsSummary } from "./src/utils/driverEarnings";
 import { parseApiDetail } from "./src/utils/parseApiError";
 import { roleLabel, t as translate } from "./src/utils/i18n";
 import { colors, radius, typography } from "./src/theme";
@@ -135,12 +136,13 @@ function FleetWorkspaceApp() {
   const [selectedLorryHistory, setSelectedLorryHistory] = useState(null);
   const [isNavOpen, setIsNavOpen] = useState(true);
   const [driverAssignments, setDriverAssignments] = useState([]);
+  const [notifications, setNotifications] = useState([]);
   const [assignmentForm, setAssignmentForm] = useState({
     lorry_id: "",
     driver_id: "",
     assigned_at: "",
     daily_wage: "",
-    commission_percent: "",
+    commission_percent: "6",
     notes: ""
   });
   const [tripForm, setTripForm] = useState({
@@ -294,7 +296,7 @@ function FleetWorkspaceApp() {
           api.getExpenses(authQuery)
         ]);
         const assignmentsPromise =
-          includeAssignments && authUser?.role === "user"
+          includeAssignments && (authUser?.role === "user" || authUser?.role === "driver")
             ? api.getDriverAssignments(authQuery)
             : Promise.resolve(null);
 
@@ -328,7 +330,7 @@ function FleetWorkspaceApp() {
   const refreshDriversAndAssignments = useCallback(async () => {
     if (!authQuery) return;
     const requests = [api.getDrivers(authQuery)];
-    if (authUser?.role === "user") {
+    if (authUser?.role === "user" || authUser?.role === "driver") {
       requests.push(api.getDriverAssignments(authQuery));
     }
     const results = await Promise.all(requests);
@@ -436,8 +438,16 @@ function FleetWorkspaceApp() {
       return;
     }
     assignmentsLoadedRef.current = false;
-    refresh({ includeAssignments: authUser.role === "user" }).catch(console.error);
+    refresh({ includeAssignments: authUser.role === "user" || authUser.role === "driver" }).catch(console.error);
   }, [authUser, selectedScopeUser, refresh]);
+
+  useEffect(() => {
+    if (!authUser || authUser.role !== "user" || !authQuery) {
+      setNotifications([]);
+      return;
+    }
+    loadNotifications().catch(() => {});
+  }, [authUser, authQuery]);
 
   useEffect(() => {
     if (activeTab !== "Trips" || authUser?.role !== "user" || !authQuery) return;
@@ -612,6 +622,39 @@ function FleetWorkspaceApp() {
       await openDriverDetail({ ...driver, is_active: !driver.is_active });
     }
     await refreshDriversAndAssignments();
+  }
+
+  async function deleteDriver(driver) {
+    if (authUser?.role !== "user") return;
+    const confirmMsg =
+      language === "te"
+        ? `${driver.name} ను తొలగించాలా? ఈ డ్రైవర్ ట్రిప్ చరిత్ర, అసైన్‌మెంట్లు మరియు లాగిన్ కూడా తొలగించబడతాయి.`
+        : `Delete ${driver.name}? Their trip history, assignments, and login will also be removed.`;
+    Alert.alert(
+      language === "te" ? "డ్రైవర్ తొలగింపు" : "Delete driver",
+      confirmMsg,
+      [
+        { text: language === "te" ? "రద్దు" : "Cancel", style: "cancel" },
+        {
+          text: language === "te" ? "తొలగించు" : "Delete",
+          style: "destructive",
+          onPress: async () => {
+            try {
+              await api.deleteDriver(driver.id, authQuery);
+              if (selectedDriver?.id === driver.id) {
+                closeDriverDetail();
+              }
+              await refreshDriversAndAssignments();
+            } catch (error) {
+              Alert.alert(
+                language === "te" ? "లోపం" : "Error",
+                parseApiError(error, "Failed to delete driver.", "డ్రైవర్ తొలగింపు విఫలమైంది.")
+              );
+            }
+          }
+        }
+      ]
+    );
   }
 
   async function openLorryHistory(lorry) {
@@ -823,7 +866,7 @@ function FleetWorkspaceApp() {
       notes: assignmentForm.notes || null
     }, authQuery);
 
-    setAssignmentForm({ lorry_id: "", driver_id: "", assigned_at: "", daily_wage: "", commission_percent: "", notes: "" });
+    setAssignmentForm({ lorry_id: "", driver_id: "", assigned_at: "", daily_wage: "", commission_percent: "6", notes: "" });
     await refreshDriversAndAssignments();
   }
 
@@ -837,6 +880,18 @@ function FleetWorkspaceApp() {
     if (authUser?.role !== "user") return;
     await api.addDriverAssignmentLeave(assignmentId, payload, authQuery);
     await refreshDriversAndAssignments();
+  }
+
+  async function acceptDriverAssignment(assignmentId) {
+    if (authUser?.role !== "driver") return;
+    await api.acceptDriverAssignment(assignmentId, authQuery);
+    await refresh({ includeAssignments: true });
+  }
+
+  async function loadNotifications() {
+    if (!authQuery || authUser?.role !== "user") return;
+    const items = await api.getNotifications(authQuery).catch(() => []);
+    setNotifications(items || []);
   }
 
   async function updateTrip(tripId, payload) {
@@ -930,6 +985,7 @@ function FleetWorkspaceApp() {
           onAddDriver={addDriver}
           onOpenDetail={openDriverDetail}
           onToggleDriverStatus={toggleDriverStatus}
+          onDeleteDriver={deleteDriver}
           assignmentForm={assignmentForm}
           setAssignmentForm={setAssignmentForm}
           onAssign={assignDriverToLorry}
@@ -953,6 +1009,9 @@ function FleetWorkspaceApp() {
             trips={filteredTrips}
             language={language}
             periodFilter={periodFilter}
+            userRole={authUser?.role}
+            expenseTotalsByTrip={expenseTotalsByTrip}
+            notifications={notifications}
           />
         </>
       );
@@ -967,6 +1026,7 @@ function FleetWorkspaceApp() {
           language={language}
           expenseTotalsByTrip={expenseTotalsByTrip}
           periodFilter={periodFilter}
+          userRole={authUser?.role}
           onUpdateTrip={updateTrip}
         />
       );
@@ -1034,6 +1094,9 @@ function FleetWorkspaceApp() {
         periodFilter={periodFilter}
         userName={profileForm.full_name || profile?.full_name || authUser?.identifier}
         userRole={authUser?.role}
+        driverAssignments={driverAssignments}
+        driverId={authUser?.driver_id}
+        onAcceptAssignment={acceptDriverAssignment}
         onUpdateTrip={updateTrip}
       />
     );
@@ -1305,9 +1368,16 @@ function FleetWorkspaceApp() {
             <View style={styles.driverModalCard}>
               <View style={styles.driverModalHead}>
                 <Text style={styles.driverModalTitle}>{language === "te" ? "డ్రైవర్ వివరాలు" : "Driver Detail"}</Text>
-                <Pressable style={styles.driverModalCloseBtn} onPress={closeDriverDetail}>
-                  <Text style={styles.driverModalCloseText}>{language === "te" ? "మూసివేయి" : "Close"}</Text>
-                </Pressable>
+                <View style={styles.driverModalActions}>
+                  {authUser?.role === "user" ? (
+                    <Pressable style={styles.driverModalDeleteBtn} onPress={() => deleteDriver(selectedDriver)}>
+                      <Text style={styles.driverModalDeleteText}>{language === "te" ? "తొలగించు" : "Delete"}</Text>
+                    </Pressable>
+                  ) : null}
+                  <Pressable style={styles.driverModalCloseBtn} onPress={closeDriverDetail}>
+                    <Text style={styles.driverModalCloseText}>{language === "te" ? "మూసివేయి" : "Close"}</Text>
+                  </Pressable>
+                </View>
               </View>
               <ScrollView
                 contentContainerStyle={styles.driverModalContent}
@@ -1760,7 +1830,26 @@ const styles = StyleSheet.create({
   driverModalTitle: {
     fontSize: 17,
     fontWeight: "900",
-    color: colors.text
+    color: colors.text,
+    flex: 1
+  },
+  driverModalActions: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8
+  },
+  driverModalDeleteBtn: {
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: "#FECACA",
+    backgroundColor: "#FEF2F2"
+  },
+  driverModalDeleteText: {
+    color: colors.danger,
+    fontWeight: "800",
+    fontSize: 12
   },
   driverModalCloseBtn: {
     paddingHorizontal: 12,

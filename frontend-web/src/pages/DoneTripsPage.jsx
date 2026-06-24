@@ -9,6 +9,7 @@ export default function DoneTripsPage({
   language = "en",
   expenseTotalsByTrip = {},
   periodFilter = "complete",
+  userRole = "user",
   onUpdateTrip
 }) {
   const t = (en, te) => (language === "te" ? te : en);
@@ -56,6 +57,7 @@ export default function DoneTripsPage({
           drivers={drivers}
           lorries={lorries}
           language={language}
+          userRole={userRole}
           onUpdateTrip={onUpdateTrip}
         />
       ) : null}

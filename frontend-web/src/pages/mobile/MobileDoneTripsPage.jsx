@@ -10,6 +10,7 @@ export default function MobileDoneTripsPage({
   language = "en",
   expenseTotalsByTrip = {},
   periodFilter = "complete",
+  userRole = "user",
   onUpdateTrip
 }) {
   const t = (en, te) => (language === "te" ? te : en);
@@ -77,7 +78,8 @@ export default function MobileDoneTripsPage({
           drivers={drivers}
           lorries={lorries}
           language={language}
-          onUpdateTrip={onUpdateTripStatus}
+          userRole={userRole}
+          onUpdateTrip={onUpdateTrip}
         />
       ) : null}
     </div>

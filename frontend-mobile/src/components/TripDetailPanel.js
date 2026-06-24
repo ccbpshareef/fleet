@@ -4,8 +4,9 @@ import DateField from "./DateField";
 import { colors, radius, typography } from "../theme";
 import { space, ui } from "../mobileUi";
 import { TRIP_STATUSES, tripStatusLabel } from "../utils/fleetLabels";
-import { EXPENSE_EDIT_FIELDS } from "../utils/tripExpenseEdit";
+import { expenseFieldsForRole } from "../utils/tripExpenseEdit";
 import { buildTripUpdatePayload, expenseDraftFromTotals, toDateInputValue } from "../utils/tripUpdate";
+import { tripDriverEarning } from "../utils/driverEarnings";
 
 function formatCurrency(value) {
   return `₹${Number(value || 0).toFixed(0)}`;
@@ -47,10 +48,14 @@ export default function TripDetailPanel({
   drivers = [],
   lorries = [],
   language = "en",
+  userRole = "user",
   onUpdateTrip,
   allowTripUpdate = true
 }) {
   const t = (en, te) => (language === "te" ? te : en);
+  const isDriver = userRole === "driver";
+  const visibleExpenseFields = expenseFieldsForRole(userRole);
+  const myEarning = tripDriverEarning(expenses);
   const [isEditing, setIsEditing] = useState(false);
   const [statusDraft, setStatusDraft] = useState(trip?.status || "Loading");
   const [loadingDateDraft, setLoadingDateDraft] = useState("");
@@ -112,7 +117,7 @@ export default function TripDetailPanel({
     <View style={ui.card}>
       <View style={styles.head}>
         <View style={styles.headCopy}>
-          <Text style={ui.screenTitle}>{t("Complete Trip Details", "పూర్తి ట్రిప్ వివరాలు")}</Text>
+          <Text style={ui.screenTitle}>{isDriver ? t("My Trip Details", "నా ట్రిప్ వివరాలు") : t("Complete Trip Details", "పూర్తి ట్రిప్ వివరాలు")}</Text>
           <Text style={ui.meta}>
             {trip.load_location} → {trip.unload_location}
           </Text>
@@ -162,13 +167,23 @@ export default function TripDetailPanel({
           label={t("Completed On", "పూర్తి అయిన తేదీ")}
           value={trip.completed_at ? new Date(trip.completed_at).toLocaleString("en-IN") : "-"}
         />
-        <DetailItem label={t("Load Price", "లోడ్ ధర")} value={formatCurrency(trip.load_price)} />
-        <DetailItem label={t("Total Expenses", "మొత్తం ఖర్చులు")} value={formatCurrency(trip.total_expenses)} />
-        <DetailItem
-          label={t("Net Profit", "నికర లాభం")}
-          value={formatCurrency(trip.net_profit)}
-          valueStyle={{ color: Number(trip.net_profit || 0) >= 0 ? colors.success : colors.danger }}
-        />
+        {isDriver ? (
+          <DetailItem
+            label={t("My Earning", "నా సంపాదన")}
+            value={formatCurrency(myEarning)}
+            valueStyle={{ color: colors.success }}
+          />
+        ) : (
+          <>
+            <DetailItem label={t("Load Price", "లోడ్ ధర")} value={formatCurrency(trip.load_price)} />
+            <DetailItem label={t("Total Expenses", "మొత్తం ఖర్చులు")} value={formatCurrency(trip.total_expenses)} />
+            <DetailItem
+              label={t("Net Profit", "నికర లాభం")}
+              value={formatCurrency(trip.net_profit)}
+              valueStyle={{ color: Number(trip.net_profit || 0) >= 0 ? colors.success : colors.danger }}
+            />
+          </>
+        )}
       </View>
 
       {canUpdate && isEditing ? (
@@ -194,9 +209,9 @@ export default function TripDetailPanel({
       ) : null}
 
       <View style={styles.expenseBreakdown}>
-        <Text style={ui.screenTitle}>{t("Expense Breakdown", "ఖర్చుల విభజన")}</Text>
+        <Text style={ui.screenTitle}>{isDriver ? t("My Earnings Breakdown", "నా సంపాదన వివరాలు") : t("Expense Breakdown", "ఖర్చుల విభజన")}</Text>
         <View style={styles.expenseGrid}>
-          {EXPENSE_EDIT_FIELDS.map((field) => (
+          {visibleExpenseFields.map((field) => (
             <ExpenseStat
               key={field.key}
               label={t(field.en, field.te)}

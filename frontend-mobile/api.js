@@ -114,6 +114,19 @@ export const api = {
       body: JSON.stringify(payload),
       query: auth
     }),
+  acceptDriverAssignment: (assignmentId, auth) =>
+    request(`/driver-assignments/${assignmentId}/accept`, { method: "POST", query: auth }),
+  getNotifications: async (auth) => {
+    try {
+      return await request("/notifications", { query: auth });
+    } catch {
+      return [];
+    }
+  },
+  markNotificationRead: (notificationId, auth) =>
+    request(`/notifications/${notificationId}/read`, { method: "PATCH", query: auth }),
+  markAllNotificationsRead: (auth) =>
+    request("/notifications/read-all", { method: "POST", query: auth }),
   getTrips: (auth) => request("/trips", { query: auth }),
   getExpenses: (auth) => request("/expenses", { query: auth }),
   createLorry: (payload, auth) =>
@@ -122,6 +135,8 @@ export const api = {
     request("/drivers", { method: "POST", body: JSON.stringify(payload), query: auth }),
   updateDriverStatus: (driverId, is_active, auth) =>
     request(`/drivers/${driverId}/status`, { method: "PATCH", body: JSON.stringify({ is_active }), query: auth }),
+  deleteDriver: (driverId, auth) =>
+    request(`/drivers/${driverId}`, { method: "DELETE", query: auth }),
   getDriverHistory: (driverId, auth) => request(`/drivers/${driverId}/history`, { query: auth }),
   updateLorryStatus: (lorryId, is_active, auth) =>
     request(`/lorries/${lorryId}/status`, { method: "PATCH", body: JSON.stringify({ is_active }), query: auth }),

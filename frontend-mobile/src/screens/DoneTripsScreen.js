@@ -12,6 +12,7 @@ export default function DoneTripsScreen({
   language = "en",
   expenseTotalsByTrip = {},
   periodFilter = "last_month",
+  userRole = "user",
   onUpdateTrip
 }) {
   const t = (en, te) => (language === "te" ? te : en);
@@ -72,7 +73,8 @@ export default function DoneTripsScreen({
           drivers={drivers}
           lorries={lorries}
           language={language}
-          onUpdateTrip={onUpdateTripStatus}
+          userRole={userRole}
+          onUpdateTrip={onUpdateTrip}
         />
       ) : null}
     </View>

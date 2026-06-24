@@ -74,6 +74,8 @@ class TripCreate(TripBase):
 
 class TripStatusUpdate(BaseModel):
     """Partial trip update: status, dates, and/or expense breakdown."""
+    model_config = {"extra": "ignore"}
+
     status: Optional[str] = None
     loading_date: Optional[date] = None
     unloading_date: Optional[date] = None
@@ -159,7 +161,7 @@ class DriverAssignmentCreate(BaseModel):
     driver_id: int
     assigned_at: Optional[datetime] = None
     daily_wage: float = 0
-    commission_percent: float = 0
+    commission_percent: float = 6
     notes: Optional[str] = None
 
 
@@ -167,8 +169,6 @@ class DriverAssignmentUpdate(BaseModel):
     driver_id: Optional[int] = None
     lorry_id: Optional[int] = None
     assigned_at: Optional[datetime] = None
-    daily_wage: Optional[float] = None
-    commission_percent: Optional[float] = None
     notes: Optional[str] = None
 
 
@@ -194,6 +194,18 @@ class DriverAssignmentLeaveOut(BaseModel):
         from_attributes = True
 
 
+class DriverAssignmentTripOut(BaseModel):
+    trip_id: int
+    route: str
+    load_price: float = 0
+    working_days: int = 0
+    commission_percent: float = 0
+    commission_amount: float = 0
+    loading_date: Optional[date] = None
+    unloading_date: Optional[date] = None
+    status: str = ""
+
+
 class DriverAssignmentOut(BaseModel):
     id: int
     lorry_id: int
@@ -202,6 +214,7 @@ class DriverAssignmentOut(BaseModel):
     completed_at: Optional[datetime] = None
     daily_wage: float = 0
     commission_percent: float = 0
+    rates_locked: bool = True
     notes: Optional[str] = None
     status: str
     total_days: int = 0
@@ -211,8 +224,31 @@ class DriverAssignmentOut(BaseModel):
     wage_amount: float = 0
     commission_amount: float = 0
     total_earning: float = 0
+    gap_days_before: int = 0
+    is_current_stint: bool = False
+    driver_accepted: bool = False
+    driver_accepted_at: Optional[datetime] = None
+    earnings_visible: bool = False
+    trips: list[DriverAssignmentTripOut] = []
     leaves: list[DriverAssignmentLeaveOut] = []
     created_by: Optional[str] = None
+
+    class Config:
+        from_attributes = True
+
+
+class NotificationOut(BaseModel):
+    id: int
+    recipient: str
+    driver_id: Optional[int] = None
+    driver_name: Optional[str] = None
+    event_type: str
+    title: str
+    message: str
+    related_type: Optional[str] = None
+    related_id: Optional[int] = None
+    is_read: bool = False
+    created_at: datetime
 
     class Config:
         from_attributes = True
@@ -245,6 +281,10 @@ class DriverHistoryOut(BaseModel):
     total_commission_amount: float = 0
     total_driver_earning: float
     total_company_net: float
+    total_assignment_wage: float = 0
+    total_assignment_commission: float = 0
+    total_assignment_earning: float = 0
+    assignments: list[DriverAssignmentOut] = []
     trips: list[DriverTripHistoryItem]
 
 

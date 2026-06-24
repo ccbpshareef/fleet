@@ -13,6 +13,7 @@ export default function DriverManagementScreen({
   onAddDriver,
   onOpenDetail,
   onToggleDriverStatus,
+  onDeleteDriver,
   assignmentForm,
   setAssignmentForm,
   onAssign,
@@ -198,6 +199,15 @@ export default function DriverManagementScreen({
                 {driver.is_active ? t("Set Inactive", "ఇనాక్టివ్ చేయి") : t("Set Active", "యాక్టివ్ చేయి")}
               </Text>
             </Pressable>
+            <Pressable
+              style={styles.deleteBtn}
+              onPress={(event) => {
+                event.stopPropagation();
+                onDeleteDriver(driver);
+              }}
+            >
+              <Text style={styles.deleteText}>{t("Delete", "తొలగించు")}</Text>
+            </Pressable>
           </Pressable>
         ))}
       </View>
@@ -226,7 +236,10 @@ export default function DriverManagementScreen({
               {t("Transport Amount", "రవాణా మొత్తం")}: {formatMoney(language, item.total_transport_amount)}
             </Text>
             <Text style={styles.driverMeta}>
-              {t("Wage Amount", "వేతన మొత్తం")}: {formatMoney(language, item.wage_amount)}
+              {t("Daily Wage", "రోజువారీ వేతనం")}: {formatMoney(language, item.daily_wage)} ({t("locked", "లాక్")})
+            </Text>
+            <Text style={styles.driverMeta}>
+              {t("Wage Amount", "వేతన మొత్తం")}: {formatMoney(language, item.wage_amount)} ({item.working_days} {t("days", "రోజులు")} × {formatMoney(language, item.daily_wage)})
             </Text>
             <Text style={styles.driverMeta}>
               {t("Commission", "కమిషన్")}: {formatMoney(language, item.commission_amount)}
@@ -234,6 +247,17 @@ export default function DriverManagementScreen({
             <Text style={styles.driverMetaStrong}>
               {t("Total Earning", "మొత్తం సంపాదన")}: {formatMoney(language, item.total_earning)}
             </Text>
+
+            {item.trips?.length ? (
+              <View style={styles.leaveList}>
+                <Text style={styles.cardTitle}>{t("Trip-wise Commission", "ట్రిప్ వారీ కమిషన్")}</Text>
+                {item.trips.map((trip) => (
+                  <Text key={trip.trip_id} style={styles.driverMeta}>
+                    {trip.route}: {formatMoney(language, trip.load_price)} × {trip.commission_percent}% = {formatMoney(language, trip.commission_amount)}
+                  </Text>
+                ))}
+              </View>
+            ) : null}
 
             {item.leaves?.length ? (
               <View style={styles.leaveList}>
@@ -374,6 +398,16 @@ const styles = StyleSheet.create({
     borderColor: colors.border
   },
   secondaryText: { color: colors.primaryDark, fontWeight: "800", fontSize: 12 },
+  deleteBtn: {
+    backgroundColor: "#FEF2F2",
+    borderRadius: 16,
+    paddingVertical: 10,
+    alignItems: "center",
+    marginTop: 4,
+    borderWidth: 1,
+    borderColor: "#FECACA"
+  },
+  deleteText: { color: colors.danger, fontWeight: "800", fontSize: 12 },
   inputOk: { borderColor: colors.success },
   inputBad: { borderColor: colors.danger },
   idStatusMuted: { fontSize: 11, fontWeight: "700", color: colors.muted },

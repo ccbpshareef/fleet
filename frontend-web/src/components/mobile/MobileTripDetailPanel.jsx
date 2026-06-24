@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
 import { TRIP_STATUSES, tripStatusLabel } from "../../utils/fleetLabels";
-import { EXPENSE_EDIT_FIELDS } from "../../utils/tripExpenseEdit";
+import { expenseFieldsForRole } from "../../utils/tripExpenseEdit";
 import { buildTripUpdatePayload, expenseDraftFromTotals, toDateInputValue } from "../../utils/tripUpdate";
+import { tripDriverEarning } from "../../utils/driverEarnings";
 
 function formatCurrency(value) {
   return `₹${Number(value || 0).toFixed(0)}`;
@@ -13,10 +14,14 @@ export default function MobileTripDetailPanel({
   drivers = [],
   lorries = [],
   language = "en",
+  userRole = "user",
   onUpdateTrip,
   allowTripUpdate = true
 }) {
   const t = (en, te) => (language === "te" ? te : en);
+  const isDriver = userRole === "driver";
+  const visibleExpenseFields = expenseFieldsForRole(userRole);
+  const myEarning = tripDriverEarning(expenses);
   const [isEditing, setIsEditing] = useState(false);
   const [statusDraft, setStatusDraft] = useState(trip?.status || "Loading");
   const [loadingDateDraft, setLoadingDateDraft] = useState("");
@@ -77,7 +82,7 @@ export default function MobileTripDetailPanel({
     <div className="mu-card mu-trip-detail">
       <div className="mu-trip-detail-head">
         <div className="mu-trip-detail-copy">
-          <h3 className="mu-screen-title">{t("Complete Trip Details", "పూర్తి ట్రిప్ వివరాలు")}</h3>
+          <h3 className="mu-screen-title">{isDriver ? t("My Trip Details", "నా ట్రిప్ వివరాలు") : t("Complete Trip Details", "పూర్తి ట్రిప్ వివరాలు")}</h3>
           <p className="mu-row-meta">
             {trip.load_location} → {trip.unload_location}
           </p>
@@ -131,18 +136,27 @@ export default function MobileTripDetailPanel({
           <span>{t("Completed On", "పూర్తి అయిన తేదీ")}</span>
           <strong>{trip.completed_at ? new Date(trip.completed_at).toLocaleString("en-IN") : "-"}</strong>
         </div>
-        <div className="mu-detail-item">
-          <span>{t("Load Price", "లోడ్ ధర")}</span>
-          <strong>{formatCurrency(trip.load_price)}</strong>
-        </div>
-        <div className="mu-detail-item">
-          <span>{t("Total Expenses", "మొత్తం ఖర్చులు")}</span>
-          <strong>{formatCurrency(trip.total_expenses)}</strong>
-        </div>
-        <div className="mu-detail-item">
-          <span>{t("Net Profit", "నికర లాభం")}</span>
-          <strong className={Number(trip.net_profit || 0) >= 0 ? "profit" : "loss"}>{formatCurrency(trip.net_profit)}</strong>
-        </div>
+        {isDriver ? (
+          <div className="mu-detail-item">
+            <span>{t("My Earning", "నా సంపాదన")}</span>
+            <strong className="profit">{formatCurrency(myEarning)}</strong>
+          </div>
+        ) : (
+          <>
+            <div className="mu-detail-item">
+              <span>{t("Load Price", "లోడ్ ధర")}</span>
+              <strong>{formatCurrency(trip.load_price)}</strong>
+            </div>
+            <div className="mu-detail-item">
+              <span>{t("Total Expenses", "మొత్తం ఖర్చులు")}</span>
+              <strong>{formatCurrency(trip.total_expenses)}</strong>
+            </div>
+            <div className="mu-detail-item">
+              <span>{t("Net Profit", "నికర లాభం")}</span>
+              <strong className={Number(trip.net_profit || 0) >= 0 ? "profit" : "loss"}>{formatCurrency(trip.net_profit)}</strong>
+            </div>
+          </>
+        )}
       </div>
 
       {canUpdate && isEditing ? (
@@ -169,9 +183,9 @@ export default function MobileTripDetailPanel({
       ) : null}
 
       <div className="mu-expense-breakdown">
-        <h4 className="mu-expense-title">{t("Expense Breakdown", "ఖర్చుల విభజన")}</h4>
+        <h4 className="mu-expense-title">{isDriver ? t("My Earnings Breakdown", "నా సంపాదన వివరాలు") : t("Expense Breakdown", "ఖర్చుల విభజన")}</h4>
         <div className="mu-expense-grid">
-          {EXPENSE_EDIT_FIELDS.map((field) => (
+          {visibleExpenseFields.map((field) => (
             <div className="mu-expense-stat" key={field.key}>
               <span>{t(field.en, field.te)}</span>
               {isEditing ? (

@@ -93,6 +93,8 @@ class DriverAssignment(Base):
     commission_percent = Column(Float, nullable=False, default=0.0)
     notes = Column(String, nullable=True)
     status = Column(String, nullable=False, default="Active")
+    driver_accepted = Column(Boolean, nullable=False, default=False)
+    driver_accepted_at = Column(DateTime, nullable=True)
     created_by = Column(String, nullable=True, index=True)
 
     lorry = relationship("Lorry", back_populates="assignments")
@@ -128,6 +130,23 @@ class UserProfile(Base):
     email = Column(String, nullable=True)
     profile_image_url = Column(String, nullable=True)
     preferred_language = Column(String, nullable=False, default="en")
+
+
+class Notification(Base):
+    __tablename__ = "notifications"
+
+    id = Column(Integer, primary_key=True, index=True)
+    recipient = Column(String, nullable=False, index=True)
+    driver_id = Column(Integer, ForeignKey("drivers.id"), nullable=True, index=True)
+    event_type = Column(String, nullable=False, index=True)
+    title = Column(String, nullable=False)
+    message = Column(String, nullable=False)
+    related_type = Column(String, nullable=True)
+    related_id = Column(Integer, nullable=True)
+    is_read = Column(Boolean, nullable=False, default=False)
+    created_at = Column(DateTime, nullable=False)
+
+    driver = relationship("Driver")
 
 
 class UserAccount(Base):
