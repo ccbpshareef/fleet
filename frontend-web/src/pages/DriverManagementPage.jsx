@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { api } from "../api";
 import { commissionProgressText, commissionRuleText } from "../utils/commission";
+import { driverCredentialClipboardText, driverCredentialSummary } from "../utils/driverCredentials";
 
 export default function DriverManagementPage({
   drivers,
@@ -122,25 +123,54 @@ export default function DriverManagementPage({
       {lastCreated ? (
         <div className="driver-created-banner">
           <div>
-            <strong>{t("Driver saved", "డ్రైవర్ సేవ్ అయ్యారు")}</strong>
-            <p>{lastCreated.name} · {t("Login ID", "లాగిన్ ID")}: <strong>{lastCreated.login_identifier}</strong></p>
-            {lastCreated.initial_password ? (
-              <p>{t("Password", "పాస్‌వర్డ్")}: <strong>{lastCreated.initial_password}</strong> ({t("auto-generated", "ఆటో జనరేట్")})</p>
-            ) : (
-              <p>{t("Password set by you", "మీరు ఇచ్చిన పాస్‌వర్డ్")}</p>
-            )}
+            <strong>{t("Driver login ready", "డ్రైవర్ లాగిన్ సిద్ధం")}</strong>
+            {(() => {
+              const creds = driverCredentialSummary(lastCreated, language);
+              return (
+                <>
+                  <p>
+                    {lastCreated.name} · {t("Login ID", "లాగిన్ ID")}: <strong>{creds.loginId}</strong>
+                  </p>
+                  <p>
+                    {t("Password", "పాస్‌వర్డ్")}: <strong>{creds.passwordText}</strong>
+                  </p>
+                  <p className="driver-login-hint">{creds.signInHint}</p>
+                </>
+              );
+            })()}
           </div>
-          <button type="button" className="ghost" onClick={onDismissCreated}>
-            {t("Dismiss", "మూసివేయి")}
-          </button>
+          <div className="driver-created-actions">
+            <button
+              type="button"
+              className="ghost driver-copy-creds-btn"
+              onClick={() => {
+                const text = driverCredentialClipboardText(lastCreated, language);
+                if (navigator.clipboard?.writeText) {
+                  navigator.clipboard.writeText(text).then(() => {
+                    /* copied */
+                  });
+                }
+              }}
+            >
+              {t("Copy credentials", "క్రెడెన్షియల్స్ కాపీ")}
+            </button>
+            <button type="button" className="ghost" onClick={onDismissCreated}>
+              {t("Dismiss", "మూసివేయి")}
+            </button>
+          </div>
         </div>
       ) : null}
 
       <div className="card driver-card">
         <h3>{t("Add Driver Form", "\u0c21\u0c4d\u0c30\u0c48\u0c35\u0c30\u0c4d \u0c1a\u0c47\u0c30\u0c4d\u0c1a\u0c47 \u0c2b\u0c3e\u0c30\u0c02")}</h3>
         <p className="muted driver-form-hint">
-          {t("Login ID and password are optional. If empty, we create driver ID + password automatically.", "లాగిన్ ID మరియు పాస్‌వర్డ్ ఐచ్ఛికం. ఖాళీగా ఉంటే ఆటోమేటిక్‌గా సృష్టిస్తాం.")}
+          {t(
+            "A driver login is always created. Share the Login ID and password with the driver. They sign in on the login page → Driver tab (not Fleet Owner).",
+            "డ్రైవర్ లాగిన్ ఎప్పుడూ సృష్టిస్తాం. లాగిన్ ID మరియు పాస్‌వర్డ్ డ్రైవర్‌కు ఇవ్వండి. లాగిన్ పేజీ → డ్రైవర్ ట్యాబ్ (ఫ్లీట్ యజమాని కాదు)."
+          )}
         </p>
+        <div className="driver-credentials-section">
+          <p className="driver-credentials-kicker">{t("Driver login (optional custom ID)", "డ్రైవర్ లాగిన్ (ఐచ్ఛిక ID)")}</p>
         <div className="form-grid single compact-form-grid compact-form-grid-single">
           <input
             placeholder={t("Driver Name", "\u0c21\u0c4d\u0c30\u0c48\u0c35\u0c30\u0c4d \u0c2a\u0c47\u0c30\u0c41")}
@@ -166,7 +196,9 @@ export default function DriverManagementPage({
           <input
             placeholder={t("Login ID (optional)", "లాగిన్ ID (ఐచ్ఛికం)")}
             name="new_driver_login_identifier"
-            autoComplete="new-password"
+            autoComplete="off"
+            autoCorrect="off"
+            spellCheck={false}
             inputMode="text"
             value={form.login_identifier || ""}
             onChange={(e) =>
@@ -219,6 +251,7 @@ export default function DriverManagementPage({
           />
           {saveError ? <p className="login-error driver-save-error">{saveError}</p> : null}
         </div>
+        </div>
       </div>
 
       <div className="card driver-card">
@@ -261,7 +294,13 @@ export default function DriverManagementPage({
           >
             <h4>{driver.name}</h4>
             <p>{t("Phone", "\u0c2b\u0c4b\u0c28\u0c4d")}: {driver.phone}</p>
-            {driver.has_login ? <p>{t("Login", "లాగిన్")}: {driver.login_identifier}</p> : null}
+            {driver.has_login ? (
+              <p className="driver-login-id-line">
+                {t("Driver login", "డ్రైవర్ లాగిన్")}: <strong>{driver.login_identifier}</strong>
+              </p>
+            ) : (
+              <p className="muted">{t("No login", "లాగిన్ లేదు")}</p>
+            )}
             <p>{t("Status", "\u0c38\u0c4d\u0c25\u0c3f\u0c24\u0c3f")}: {driver.is_active ? t("Active", "\u0c2f\u0c3e\u0c15\u0c4d\u0c1f\u0c3f\u0c35\u0c4d") : t("Inactive", "\u0c07\u0c28\u0c3e\u0c15\u0c4d\u0c1f\u0c3f\u0c35\u0c4d")}</p>
             <p>{t("Assigned Lorry", "\u0c15\u0c47\u0c1f\u0c3e\u0c2f\u0c3f\u0c02\u0c1a\u0c3f\u0c28 \u0c32\u0c3e\u0c30\u0c40")}: {lorries.find((l) => l.driver_id === driver.id)?.vehicle_number || t("Not assigned", "\u0c15\u0c47\u0c1f\u0c3e\u0c2f\u0c3f\u0c02\u0c1a\u0c32\u0c47\u0c26\u0c41")}</p>
             <button

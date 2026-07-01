@@ -1289,7 +1289,7 @@ def create_driver(
         db.commit()
 
     base = serialize_driver(driver, db)
-    message = f"Driver {driver.name} created successfully."
+    message = f"Driver {driver.name} created successfully. Login ID: {login_identifier}."
     return DriverCreateOut(
         **base.model_dump(),
         message=message,
@@ -1447,10 +1447,15 @@ def get_driver_history(
         commission_amount = commission_for_trip_in_stint(db, trip)
         transport_amount = float(trip.load_price or 0)
         working_days = trip_working_days(trip)
-        non_commission_earning = sum(
-            float(item.driver_bata or 0) + float(item.driver_daily_wage or 0) for item in expenses
-        )
-        driver_earned = round_money(non_commission_earning + commission_amount)
+        stint_assignment = assignment_for_trip(db, trip)
+        bata_amount = round_money(sum(float(item.driver_bata or 0) for item in expenses))
+        if stint_assignment:
+            # Keep history consistent with locked assignment wage (days × daily_wage),
+            # so trip expense edits do not reduce earned wage unexpectedly.
+            wage_amount = round_money(working_days * float(stint_assignment.daily_wage or 0))
+        else:
+            wage_amount = round_money(sum(float(item.driver_daily_wage or 0) for item in expenses))
+        driver_earned = round_money(bata_amount + wage_amount + commission_amount)
         trip_total_earning = driver_earned
 
         total_working_days += working_days
@@ -1458,7 +1463,6 @@ def get_driver_history(
         total_commission_amount += commission_amount
         total_driver_earning += driver_earned
         total_company_net += company_net
-        stint_assignment = assignment_for_trip(db, trip)
         stint_transport = 0.0
         if stint_assignment:
             stint_transport = sum(

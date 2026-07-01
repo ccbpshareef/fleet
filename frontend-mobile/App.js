@@ -29,6 +29,11 @@ import {
 import { buildExpenseTotalsByTrip } from "./src/utils/expenseTotals";
 import { roundMoney } from "./src/utils/money";
 import { computeDriverEarningsSummary } from "./src/utils/driverEarnings";
+import {
+  buildDriverCreatePayload,
+  driverCredentialClipboardText,
+  validateDriverCreateForm
+} from "./src/utils/driverCredentials";
 import { parseApiDetail } from "./src/utils/parseApiError";
 import { roleLabel, t as translate } from "./src/utils/i18n";
 import { colors, radius, typography } from "./src/theme";
@@ -200,6 +205,7 @@ function FleetWorkspaceApp() {
     password: ""
   });
   const [driverSaveError, setDriverSaveError] = useState("");
+  const [lastDriverCreated, setLastDriverCreated] = useState(null);
   const [scopeUsers, setScopeUsers] = useState([]);
   const [selectedScopeUser, setSelectedScopeUser] = useState("");
   const refreshInFlightRef = useRef(false);
@@ -450,6 +456,17 @@ function FleetWorkspaceApp() {
   }, [authUser, authQuery]);
 
   useEffect(() => {
+    const canLoadNotifications =
+      !!authQuery &&
+      (authUser?.role === "user" || (authUser?.role === "admin" && authQuery?.scope_user));
+    if (!canLoadNotifications) return;
+    const intervalId = setInterval(() => {
+      loadNotifications().catch(() => {});
+    }, 10000);
+    return () => clearInterval(intervalId);
+  }, [authUser?.role, authQuery?.viewer, authQuery?.scope_user]);
+
+  useEffect(() => {
     if (activeTab !== "Trips" || authUser?.role !== "user" || !authQuery) return;
     if (assignmentsLoadedRef.current) return;
     api
@@ -549,14 +566,16 @@ function FleetWorkspaceApp() {
   async function addDriver() {
     if (authUser?.role !== "user") return;
     setDriverSaveError("");
-    if (!driverForm.name?.trim() || !driverForm.phone?.trim()) {
-      const msg =
-        language === "te" ? "పేరు మరియు ఫోన్ అవసరం." : "Driver name and phone are required.";
-      setDriverSaveError(msg);
-      Alert.alert(language === "te" ? "అవసరం" : "Required", msg);
+    const { payload, loginId, password } = buildDriverCreatePayload(driverForm);
+    const validationMsg = validateDriverCreateForm(
+      { loginId, password, name: payload.name, phone: payload.phone },
+      language
+    );
+    if (validationMsg) {
+      setDriverSaveError(validationMsg);
+      Alert.alert(language === "te" ? "అవసరం" : "Required", validationMsg);
       return;
     }
-    const loginId = (driverForm.login_identifier || "").trim().toLowerCase();
     if (loginId.length >= 3) {
       try {
         const check = await api.checkUserId(loginId);
@@ -573,24 +592,15 @@ function FleetWorkspaceApp() {
       }
     }
     try {
-      const created = await api.createDriver(
-        {
-          ...driverForm,
-          login_identifier: loginId || driverForm.login_identifier
-        },
-        authQuery
-      );
+      const created = await api.createDriver(payload, authQuery);
+      setLastDriverCreated(created);
       setDriverForm({ name: "", phone: "", license_number: "", login_identifier: "", password: "" });
       setDriverSaveError("");
       await refreshDriversAndAssignments();
-      const passwordLine = created.initial_password
-        ? (language === "te" ? `పాస్‌వర్డ్: ${created.initial_password} (ఆటో)` : `Password: ${created.initial_password} (auto)`)
-        : language === "te"
-          ? "మీరు ఇచ్చిన పాస్‌వర్డ్"
-          : "Password set by you";
+      const creds = driverCredentialClipboardText(created, language);
       Alert.alert(
-        language === "te" ? "డ్రైవర్ సేవ్ అయ్యారు" : "Driver saved",
-        `${created.name}\n${language === "te" ? "లాగిన్ ID" : "Login ID"}: ${created.login_identifier}\n${passwordLine}`
+        language === "te" ? "డ్రైవర్ లాగిన్ సిద్ధం" : "Driver login ready",
+        creds
       );
     } catch (error) {
       const msg = parseApiError(
@@ -889,7 +899,10 @@ function FleetWorkspaceApp() {
   }
 
   async function loadNotifications() {
-    if (!authQuery || authUser?.role !== "user") return;
+    const canLoadNotifications =
+      !!authQuery &&
+      (authUser?.role === "user" || (authUser?.role === "admin" && authQuery?.scope_user));
+    if (!canLoadNotifications) return;
     const items = await api.getNotifications(authQuery).catch(() => []);
     setNotifications(items || []);
   }
@@ -982,6 +995,8 @@ function FleetWorkspaceApp() {
             if (driverSaveError) setDriverSaveError("");
           }}
           saveError={driverSaveError}
+          lastCreated={lastDriverCreated}
+          onDismissCreated={() => setLastDriverCreated(null)}
           onAddDriver={addDriver}
           onOpenDetail={openDriverDetail}
           onToggleDriverStatus={toggleDriverStatus}

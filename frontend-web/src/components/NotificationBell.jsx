@@ -13,6 +13,15 @@ export default function NotificationBell({
 }) {
   const t = (en, te) => (language === "te" ? te : en);
   const panelRef = useRef(null);
+  const typeLabel = (type) => {
+    if (!type) return t("Update", "అప్డేట్");
+    const key = String(type).toLowerCase();
+    if (key === "trip") return t("Trip", "ట్రిప్");
+    if (key === "driver") return t("Driver", "డ్రైవర్");
+    if (key === "assignment") return t("Assignment", "అసైన్‌మెంట్");
+    if (key === "lorry") return t("Lorry", "లారీ");
+    return t("Update", "అప్డేట్");
+  };
 
   useEffect(() => {
     if (!open) return;
@@ -43,7 +52,14 @@ export default function NotificationBell({
       {open ? (
         <div className="notification-panel">
           <div className="notification-panel-head">
-            <strong>{t("Notifications", "నోటిఫికేషన్లు")}</strong>
+            <div>
+              <strong>{t("Notifications", "నోటిఫికేషన్లు")}</strong>
+              <p className="notification-head-sub">
+                {unreadCount > 0
+                  ? t(`${unreadCount} unread alerts`, `${unreadCount} చదవని అలర్ట్‌లు`)
+                  : t("All caught up", "అన్నీ చదివారు")}
+              </p>
+            </div>
             <div className="notification-panel-actions">
               {unreadCount > 0 ? (
                 <button type="button" className="ghost compact-submit" onClick={onMarkAllRead}>
@@ -66,6 +82,12 @@ export default function NotificationBell({
                   className={`notification-item ${item.is_read ? "" : "unread"}`}
                   onClick={() => onMarkRead?.(item)}
                 >
+                  <div className="notification-item-meta">
+                    <span className={`notification-type-pill ${item.is_read ? "read" : ""}`}>
+                      {typeLabel(item.related_type)}
+                    </span>
+                    {!item.is_read ? <span className="notification-new-dot" aria-hidden="true" /> : null}
+                  </div>
                   <div className="notification-item-top">
                     <strong>{item.title}</strong>
                     <span className="notification-time">
@@ -78,6 +100,9 @@ export default function NotificationBell({
                       {t("Driver", "డ్రైవర్")}: {item.driver_name}
                     </span>
                   ) : null}
+                  <span className="notification-action-hint">
+                    {t("Tap to open", "తెరవడానికి ట్యాప్ చేయండి")} →
+                  </span>
                 </button>
               ))
             ) : (

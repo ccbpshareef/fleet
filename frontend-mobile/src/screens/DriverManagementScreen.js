@@ -3,6 +3,7 @@ import { Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 import { api } from "../../api";
 import { assignmentStatusLabel, formatMoney } from "../utils/i18n";
 import { colors } from "../theme";
+import { driverCredentialSummary } from "../utils/driverCredentials";
 
 export default function DriverManagementScreen({
   drivers,
@@ -20,7 +21,9 @@ export default function DriverManagementScreen({
   onAddAssignmentLeave,
   onCompleteAssignment,
   language = "en",
-  saveError = ""
+  saveError = "",
+  lastCreated = null,
+  onDismissCreated = () => {}
 }) {
   const t = (en, te) => (language === "te" ? te : en);
   const [leaveForms, setLeaveForms] = useState({});
@@ -93,8 +96,33 @@ export default function DriverManagementScreen({
       <View style={styles.card}>
         <Text style={styles.cardTitle}>{t("Add Driver", "డ్రైవర్ చేర్చు")}</Text>
         <Text style={styles.hint}>
-          {t("Login ID and password are optional. Leave blank for auto-generated credentials.", "లాగిన్ ID మరియు పాస్‌వర్డ్ ఐచ్ఛికం. ఖాళీగా ఉంటే ఆటోమేటిక్‌గా సృష్టిస్తాం.")}
+          {t(
+            "A driver login is always created. Share Login ID + password. Driver signs in on the Driver tab.",
+            "డ్రైవర్ లాగిన్ ఎప్పుడూ సృష్టిస్తాం. లాగిన్ ID + పాస్‌వర్డ్ ఇవ్వండి. డ్రైవర్ ట్యాబ్‌లో లాగిన్ అవ్వాలి."
+          )}
         </Text>
+        {lastCreated ? (
+          <View style={styles.createdBanner}>
+            <Text style={styles.createdTitle}>{t("Driver login ready", "డ్రైవర్ లాగిన్ సిద్ధం")}</Text>
+            {(() => {
+              const creds = driverCredentialSummary(lastCreated, language);
+              return (
+                <>
+                  <Text style={styles.createdLine}>
+                    {lastCreated.name} · {t("Login ID", "లాగిన్ ID")}: {creds.loginId}
+                  </Text>
+                  <Text style={styles.createdLine}>
+                    {t("Password", "పాస్‌వర్డ్")}: {creds.passwordText}
+                  </Text>
+                  <Text style={styles.createdHint}>{creds.signInHint}</Text>
+                </>
+              );
+            })()}
+            <Pressable style={styles.dismissBtn} onPress={onDismissCreated}>
+              <Text style={styles.dismissBtnText}>{t("Dismiss", "మూసివేయి")}</Text>
+            </Pressable>
+          </View>
+        ) : null}
         <TextInput style={styles.input} placeholder={t("Driver Name", "డ్రైవర్ పేరు")} placeholderTextColor={colors.mutedSoft} value={form.name} onChangeText={(v) => setForm({ ...form, name: v })} />
         <TextInput style={styles.input} placeholder={t("Phone", "ఫోన్")} placeholderTextColor={colors.mutedSoft} value={form.phone} onChangeText={(v) => setForm({ ...form, phone: v })} />
         <TextInput style={styles.input} placeholder={t("License Number", "లైసెన్స్ నంబర్")} placeholderTextColor={colors.mutedSoft} value={form.license_number} onChangeText={(v) => setForm({ ...form, license_number: v })} />
@@ -185,6 +213,11 @@ export default function DriverManagementScreen({
               </Text>
             </View>
             <Text style={styles.driverMeta}>{t("Phone", "ఫోన్")}: {driver.phone}</Text>
+            {driver.has_login ? (
+              <Text style={styles.driverMetaStrong}>
+                {t("Driver login", "డ్రైవర్ లాగిన్")}: {driver.login_identifier}
+              </Text>
+            ) : null}
             <Text style={styles.driverMeta}>
               {t("Assigned Lorry", "కేటాయించిన లారీ")}: {lorries.find((l) => l.driver_id === driver.id)?.vehicle_number || t("Not assigned", "కేటాయించలేదు")}
             </Text>
@@ -349,6 +382,20 @@ const styles = StyleSheet.create({
   },
   cardTitle: { fontSize: 17, fontWeight: "900", color: colors.text },
   hint: { fontSize: 12, lineHeight: 18, color: colors.muted, marginBottom: 10 },
+  createdBanner: {
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: colors.success,
+    backgroundColor: colors.successSoft,
+    padding: 12,
+    marginBottom: 12,
+    gap: 4
+  },
+  createdTitle: { fontWeight: "900", fontSize: 14, color: colors.success },
+  createdLine: { fontSize: 12.5, color: colors.text, lineHeight: 18 },
+  createdHint: { fontSize: 12, color: colors.success, fontWeight: "700", marginTop: 4 },
+  dismissBtn: { alignSelf: "flex-start", marginTop: 6, paddingVertical: 4 },
+  dismissBtnText: { color: colors.primaryDark, fontWeight: "800", fontSize: 12 },
   input: {
     borderWidth: 1,
     borderColor: colors.border,

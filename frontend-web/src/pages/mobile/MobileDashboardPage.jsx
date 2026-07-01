@@ -20,7 +20,9 @@ export default function MobileDashboardPage({
   driverAssignments = [],
   driverId = null,
   onAcceptAssignment = async () => {},
-  onUpdateTrip
+  onUpdateTrip,
+  onAddTrip,
+  onAddExpense
 }) {
   const t = (en, te) => (language === "te" ? te : en);
   const periodLabel = getPeriodLabel(periodFilter, language);
@@ -242,6 +244,19 @@ export default function MobileDashboardPage({
         subtitle={t("Fleet overview for the selected period.", "ఎంచుకున్న కాలానికి ఫ్లీట్ అవలోకనం.")}
       />
 
+      {onAddTrip ? (
+        <div className="mu-action-row">
+          <button type="button" className="mu-primary-btn" onClick={onAddTrip}>
+            {t("Create Trip", "ట్రిప్ సృష్టించు")}
+          </button>
+          {onAddExpense ? (
+            <button type="button" className="mu-secondary-btn" onClick={onAddExpense}>
+              {t("Add Expense", "ఖర్చు చేర్చు")}
+            </button>
+          ) : null}
+        </div>
+      ) : null}
+
       <div className="mu-stat-grid mu-stat-grid-compact">
         <div className="mu-stat-box">
           <span className="mu-stat-label">{t("Lorries", "లారీలు")}</span>
@@ -254,6 +269,10 @@ export default function MobileDashboardPage({
         <div className="mu-stat-box">
           <span className="mu-stat-label">{t("Income", "ఆదాయం")}</span>
           <span className="mu-stat-value">₹{totalIncome.toFixed(0)}</span>
+        </div>
+        <div className="mu-stat-box">
+          <span className="mu-stat-label">{t("Expenses", "ఖర్చులు")}</span>
+          <span className="mu-stat-value">₹{totalExpenses.toFixed(0)}</span>
         </div>
         <div className="mu-stat-box">
           <span className="mu-stat-label">{t("Profit", "లాభం")}</span>

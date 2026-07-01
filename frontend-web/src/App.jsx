@@ -20,6 +20,7 @@ import MobileDashboardPage from "./pages/mobile/MobileDashboardPage";
 import MobileDoneTripsPage from "./pages/mobile/MobileDoneTripsPage";
 import MobileReportsPage from "./pages/mobile/MobileReportsPage";
 import MobileTripContactsPage from "./pages/mobile/MobileTripContactsPage";
+import MobileMorePage from "./pages/mobile/MobileMorePage";
 import { formatMoney, languageToggleLabel, na, activeLabel, roleLabel } from "./utils/i18n";
 import {
   computeDashboardFromTrips,
@@ -31,6 +32,11 @@ import {
 import { computeAssignmentPaySummary, computeDriverEarningsSummary } from "./utils/driverEarnings";
 import { roundMoney } from "./utils/money";
 import { commissionProgressText, commissionRuleText } from "./utils/commission";
+import {
+  buildDriverCreatePayload,
+  driverCredentialClipboardText,
+  validateDriverCreateForm
+} from "./utils/driverCredentials";
 
 const adminNavItems = [
   "Dashboard",
@@ -55,12 +61,12 @@ const userNavItems = [
 
 const driverNavItems = ["Dashboard", "Create Trip", "Done Trips", "Trip Contacts"];
 
-const adminMobileTabs = ["Dashboard", "Done", "Contacts", "Reports"];
-const userMobileTabs = ["Dashboard", "Done", "Contacts", "Trips", "Add", "Reports"];
-const driverMobileTabs = ["Dashboard", "Done", "Add", "Reports"];
+const adminMobileTabs = ["Dashboard", "Done", "Contacts", "More", "Reports"];
+const userMobileTabs = ["Dashboard", "Done", "Contacts", "Trips", "Add", "More", "Reports"];
+const driverMobileTabs = ["Dashboard", "Done", "Contacts", "Add", "Reports"];
 const userActionPages = new Set(["Add Lorry", "Drivers", "Create Trip"]);
 const userActionMobileTabs = new Set(["Trips", "Add"]);
-const mobileFilterTabs = new Set(["Dashboard", "Done", "Contacts", "Reports", "Trips"]);
+const mobileFilterTabs = new Set(["Dashboard", "Done", "Contacts", "Reports", "Trips", "More"]);
 const workspaceFilterPages = new Set(["Dashboard", "Done Trips", "Trip Contacts", "Reports", "Drivers"]);
 
 const mobileTabLabels = {
@@ -69,6 +75,7 @@ const mobileTabLabels = {
   Contacts: { en: "Contacts", te: "కాంటాక్ట్" },
   Trips: { en: "Drivers", te: "డ్రైవర్" },
   Add: { en: "Add", te: "కొత్త" },
+  More: { en: "More", te: "మరిన్ని" },
   Reports: { en: "Reports", te: "రిపోర్ట్" },
   Fleet: { en: "Fleet", te: "ఫ్లీట్" },
   "Trips Live": { en: "Trips Live", te: "లైవ్ ట్రిప్స్" },
@@ -81,6 +88,7 @@ const mobileTabIcons = {
   Contacts: "contacts",
   Trips: "steering",
   Add: "add-box",
+  More: "more",
   Reports: "reports"
 };
 
@@ -91,7 +99,9 @@ const pageToMobileTab = {
   "Create Trip": "Add",
   "Add Lorry": "Add",
   Drivers: "Trips",
-  Reports: "Reports"
+  Reports: "Reports",
+  Profit: "More",
+  "Live Tracking": "More"
 };
 
 const mobileTabToPage = {
@@ -123,6 +133,10 @@ const mobileTabHints = {
   Add: {
     en: "Register lorries or create a new trip with expenses.",
     te: "లారీ చేర్చండి లేదా కొత్త ట్రిప్ సృష్టించండి."
+  },
+  More: {
+    en: "Profit summary, live tracking, and other fleet tools.",
+    te: "లాభం సారాంశం, లైవ్ ట్రాకింగ్ మరియు ఇతర ఫ్లీట్ టూల్స్."
   },
   Reports: {
     en: "Business summaries and operational reports.",
@@ -265,6 +279,7 @@ export default function App() {
   const [scopeUsers, setScopeUsers] = useState([]);
   const [selectedScopeUser, setSelectedScopeUser] = useState("");
   const [activeMobileTab, setActiveMobileTab] = useState("Dashboard");
+  const [mobileMoreSubview, setMobileMoreSubview] = useState(null);
   const [periodFilter, setPeriodFilter] = useState("complete");
   const [driverFilterId, setDriverFilterId] = useState("");
   const isMobile = useIsMobile();
@@ -277,6 +292,17 @@ export default function App() {
     }
     return query;
   }, [authUser, selectedScopeUser]);
+
+  async function loadNotifications() {
+    const canLoadNotifications =
+      authQuery?.role === "user" || (authQuery?.role === "admin" && authQuery?.scope_user);
+    if (!canLoadNotifications) {
+      setNotifications([]);
+      return;
+    }
+    const notif = await api.getNotifications(authQuery).catch(() => []);
+    setNotifications(notif || []);
+  }
 
   async function loadData() {
     const canLoadNotifications =
@@ -401,6 +427,25 @@ export default function App() {
     loadData().catch(console.error);
   }, [authUser, selectedScopeUser]);
 
+  useEffect(() => {
+    const canLoadNotifications =
+      authQuery?.role === "user" || (authQuery?.role === "admin" && authQuery?.scope_user);
+    if (!canLoadNotifications) return;
+    const intervalId = window.setInterval(() => {
+      loadNotifications().catch(() => {});
+    }, 10000);
+    const onVisibility = () => {
+      if (document.visibilityState === "visible") {
+        loadNotifications().catch(() => {});
+      }
+    };
+    document.addEventListener("visibilitychange", onVisibility);
+    return () => {
+      window.clearInterval(intervalId);
+      document.removeEventListener("visibilitychange", onVisibility);
+    };
+  }, [authQuery?.role, authQuery?.scope_user, authQuery?.viewer]);
+
   function parseApiDetail(error, fallback) {
     const raw = error?.message || "";
     try {
@@ -419,13 +464,16 @@ export default function App() {
   async function saveDriver() {
     if (authUser?.role !== "user") return;
     setDriverSaveError("");
-    if (!newDriver.name?.trim() || !newDriver.phone?.trim()) {
-      const msg = language === "te" ? "పేరు మరియు ఫోన్ అవసరం." : "Driver name and phone are required.";
-      setDriverSaveError(msg);
-      showToast(msg, "error");
+    const { payload, loginId, password } = buildDriverCreatePayload(newDriver);
+    const validationMsg = validateDriverCreateForm(
+      { loginId, password, name: payload.name, phone: payload.phone },
+      language
+    );
+    if (validationMsg) {
+      setDriverSaveError(validationMsg);
+      showToast(validationMsg, "error");
       return;
     }
-    const loginId = (newDriver.login_identifier || "").trim().toLowerCase();
     if (loginId.length >= 3) {
       try {
         const check = await api.checkUserId(loginId);
@@ -440,14 +488,21 @@ export default function App() {
       }
     }
     try {
-      const created = await api.createDriver(
-        { ...newDriver, login_identifier: loginId || newDriver.login_identifier },
-        authQuery
-      );
+      const created = await api.createDriver(payload, authQuery);
       setLastDriverCreated(created);
       setNewDriver({ name: "", phone: "", license_number: "", login_identifier: "", password: "" });
       setDriverSaveError("");
       await loadData();
+      const creds = driverCredentialClipboardText(created, language);
+      showToast(
+        language === "te"
+          ? `${created.name} సేవ్ అయ్యారు. డ్రైవర్ లాగిన్ సృష్టించబడింది — డ్రైవర్ ట్యాబ్‌లో లాగిన్ అవ్వండి.`
+          : `${created.name} saved. Driver login created — sign in on the Driver tab.`,
+        "success"
+      );
+      if (typeof navigator !== "undefined" && navigator.clipboard?.writeText) {
+        navigator.clipboard.writeText(creds).catch(() => {});
+      }
     } catch (error) {
       const msg = parseApiDetail(
         error,
@@ -704,10 +759,41 @@ export default function App() {
     await loadData();
   }
 
+  function redirectFromNotification(notification) {
+    if (!notification) return;
+    const relatedType = String(notification.related_type || "").toLowerCase();
+    const text = `${notification.title || ""} ${notification.message || ""}`.toLowerCase();
+
+    if (relatedType === "trip" || text.includes("trip")) {
+      goToPage("Done Trips");
+      return;
+    }
+
+    if (relatedType === "driver" || relatedType === "assignment" || text.includes("driver") || text.includes("assignment")) {
+      if (authUser?.role === "driver") {
+        goToPage("Dashboard");
+      } else {
+        goToPage("Drivers");
+      }
+      return;
+    }
+
+    if (relatedType === "lorry" || text.includes("lorry")) {
+      goToPage("Add Lorry");
+      return;
+    }
+
+    goToPage("Dashboard");
+  }
+
   async function markNotificationRead(notification) {
-    if (!notification || notification.is_read) return;
-    await api.markNotificationRead(notification.id, authQuery);
-    await loadData();
+    if (!notification) return;
+    if (!notification.is_read) {
+      await api.markNotificationRead(notification.id, authQuery);
+      await loadData();
+    }
+    setShowNotifications(false);
+    redirectFromNotification(notification);
   }
 
   async function markAllNotificationsRead() {
@@ -1031,6 +1117,19 @@ export default function App() {
       );
     }
 
+    if (activeMobileTab === "More" && authUser?.role !== "driver") {
+      return (
+        <MobileMorePage
+          subview={mobileMoreSubview}
+          onSubviewChange={setMobileMoreSubview}
+          dashboard={filteredDashboard}
+          trips={filteredTrips}
+          language={language}
+          periodFilter={periodFilter}
+        />
+      );
+    }
+
     if (activeMobileTab === "Add") {
       if (authUser?.role === "driver") {
         return (
@@ -1090,6 +1189,8 @@ export default function App() {
         driverId={authUser?.driver_id}
         onAcceptAssignment={acceptDriverAssignment}
         onUpdateTrip={updateTrip}
+        onAddTrip={authUser?.role === "user" ? () => goToPage("Create Trip") : undefined}
+        onAddExpense={authUser?.role === "user" ? () => goToPage("Create Trip") : undefined}
       />
     );
   }
@@ -1334,9 +1435,18 @@ export default function App() {
 
   function goToPage(page) {
     setActivePage(page);
-    const mobileTab = pageToMobileTab[page];
-    if (mobileTab) {
-      setActiveMobileTab(mobileTab);
+    if (page === "Profit") {
+      setActiveMobileTab("More");
+      setMobileMoreSubview("profit");
+    } else if (page === "Live Tracking") {
+      setActiveMobileTab("More");
+      setMobileMoreSubview("tracking");
+    } else {
+      const mobileTab = pageToMobileTab[page];
+      if (mobileTab) {
+        setActiveMobileTab(mobileTab);
+      }
+      setMobileMoreSubview(null);
     }
     if (typeof window !== "undefined" && window.innerWidth <= 860) {
       setIsSidebarOpen(false);
@@ -1345,6 +1455,11 @@ export default function App() {
 
   function goToMobileTab(tab) {
     setActiveMobileTab(tab);
+    if (tab === "More") {
+      setMobileMoreSubview(null);
+      return;
+    }
+    setMobileMoreSubview(null);
     const page = mobileTabToPage[tab];
     if (page) {
       setActivePage(page);
@@ -1495,7 +1610,7 @@ export default function App() {
 
   if (!isSessionReady) {
     return (
-      <main className="main auth-shell" style={{ minHeight: "100vh", display: "grid", placeItems: "center" }}>
+      <main className="main auth-shell">
         <div className="startup-loader">
           <span className="startup-loader-spinner" aria-hidden="true" />
           <p className="muted">{language === "te" ? "లోడ్ అవుతోంది..." : "Loading workspace..."}</p>
@@ -1506,7 +1621,7 @@ export default function App() {
 
   if (!authUser) {
     return (
-      <main className={`main auth-shell ${isMobile ? "auth-shell-mobile" : ""}`} style={{ minHeight: "100vh", display: "grid", placeItems: "center" }}>
+      <main className={`main auth-shell ${isMobile ? "auth-shell-mobile" : ""}`}>
         <LoginPage
           language={language}
           form={loginForm}
@@ -2266,6 +2381,16 @@ function NavIcon({ name }) {
       <svg {...iconProps}>
         <path d="M12 21s6-4.8 6-10a6 6 0 1 0-12 0c0 5.2 6 10 6 10Z" />
         <circle cx="12" cy="11" r="2.2" />
+      </svg>
+    );
+  }
+
+  if (name === "more") {
+    return (
+      <svg {...iconProps}>
+        <circle cx="6" cy="12" r="1.4" fill="currentColor" stroke="none" />
+        <circle cx="12" cy="12" r="1.4" fill="currentColor" stroke="none" />
+        <circle cx="18" cy="12" r="1.4" fill="currentColor" stroke="none" />
       </svg>
     );
   }
