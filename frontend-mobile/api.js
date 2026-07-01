@@ -127,6 +127,8 @@ export const api = {
     request(`/notifications/${notificationId}/read`, { method: "PATCH", query: auth }),
   markAllNotificationsRead: (auth) =>
     request("/notifications/read-all", { method: "POST", query: auth }),
+  clearAllNotifications: (auth) =>
+    request("/notifications", { method: "DELETE", query: auth }),
   getTrips: (auth) => request("/trips", { query: auth }),
   getExpenses: (auth) => request("/expenses", { query: auth }),
   createLorry: (payload, auth) =>
@@ -140,6 +142,8 @@ export const api = {
   getDriverHistory: (driverId, auth) => request(`/drivers/${driverId}/history`, { query: auth }),
   updateLorryStatus: (lorryId, is_active, auth) =>
     request(`/lorries/${lorryId}/status`, { method: "PATCH", body: JSON.stringify({ is_active }), query: auth }),
+  deleteLorry: (lorryId, auth) =>
+    request(`/lorries/${lorryId}`, { method: "DELETE", query: auth }),
   getLorryHistory: (lorryId, auth) => request(`/lorries/${lorryId}/history`, { query: auth }),
   createTrip: (payload, auth) =>
     request("/trips", { method: "POST", body: JSON.stringify(payload), query: auth }),

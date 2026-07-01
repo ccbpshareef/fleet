@@ -2,7 +2,10 @@ import { useMemo, useState } from "react";
 import { TRIP_STATUSES, tripStatusLabel } from "../../utils/fleetLabels";
 import { computeDriverEarningsSummary, computeAssignmentPaySummary, formatAssignmentPeriod, driverNeedsAssignmentAccept, getDriverActiveAssignment } from "../../utils/driverEarnings";
 import { getPeriodLabel } from "../../utils/periodFilter";
+import MobileHeroBanner from "../../components/mobile/MobileHeroBanner";
 import MobileTripDetailPanel from "../../components/mobile/MobileTripDetailPanel";
+import MobileTripListRow from "../../components/mobile/MobileTripListRow";
+import MobileTripSheet from "../../components/mobile/MobileTripSheet";
 
 export default function MobileDashboardPage({
   dashboard,
@@ -62,27 +65,38 @@ export default function MobileDashboardPage({
     [trips]
   );
 
+  const heroStats = isDriver
+    ? [
+        { label: t("My Trips", "నా ట్రిప్స్"), value: driverEarnings.tripCount },
+        { label: t("Live", "లైవ్"), value: driverEarnings.activeTripCount },
+        { label: t("Done", "పూర్తి"), value: driverEarnings.doneTripCount }
+      ]
+    : [
+        { label: t("Trips", "ట్రిప్స్"), value: trips.length },
+        { label: t("Live", "లైవ్"), value: activeTrips.length },
+        { label: t("Done", "పూర్తి"), value: doneTrips.length }
+      ];
+
   if (!trips.length && !(isDriver && (assignmentPay.periodCount > 0 || needsAccept))) {
     return (
       <div className="mu-page">
-        <div className="mu-user-card">
-          <h2 className="mu-user-title">{userName || t("Fleet User", "ఫ్లీట్ యూజర్")}</h2>
-          <p className="mu-user-meta">
-            {periodLabel} · {t("No trips found", "ట్రిప్స్ లేవు")}
-          </p>
-          <p className="mu-empty-text">
-            {t(
-              "No trips in this period. Try Complete Period or another filter.",
-              "ఈ కాలంలో ట్రిప్స్ లేవు. పూర్తి కాలం లేదా వేరే ఫిల్టర్ ఎంచుకోండి."
-            )}
-          </p>
-        </div>
+        <MobileHeroBanner
+          userName={userName}
+          periodLabel={periodLabel}
+          stats={heroStats}
+          language={language}
+          subtitle={t("No trips in this period.", "ఈ కాలంలో ట్రిప్స్ లేవు.")}
+        />
       </div>
     );
   }
 
   const selectedTrip = trips.find((item) => item.id === selectedTripId);
   const selectedExpense = selectedTripId ? expenseTotalsByTrip[selectedTripId] : null;
+
+  function closeTripSheet() {
+    setSelectedTripId(null);
+  }
 
   if (isDriver) {
     const highlight = assignmentPay.currentStint || assignmentPay.active || assignmentPay.latest;
@@ -92,23 +106,13 @@ export default function MobileDashboardPage({
     );
     return (
       <div className="mu-page">
-        <div className="mu-user-card">
-          <h2 className="mu-user-title">
-            {t("Hello", "నమస్కారం")}, {userName || t("Driver", "డ్రైవర్")}
-          </h2>
-          <p className="mu-user-meta">{periodLabel}</p>
-          <div className="mu-user-stats">
-            <span>
-              {t("My Trips", "నా ట్రిప్స్")}: <strong>{driverEarnings.tripCount}</strong>
-            </span>
-            <span>
-              {t("Live", "లైవ్")}: <strong>{driverEarnings.activeTripCount}</strong>
-            </span>
-            <span>
-              {t("Done", "పూర్తి")}: <strong>{driverEarnings.doneTripCount}</strong>
-            </span>
-          </div>
-        </div>
+        <MobileHeroBanner
+          userName={userName || t("Driver", "డ్రైవర్")}
+          periodLabel={periodLabel}
+          stats={heroStats}
+          language={language}
+          subtitle={t("Your trips and earnings for this period.", "ఈ కాలానికి మీ ట్రిప్స్ మరియు సంపాదన.")}
+        />
 
         {needsAccept && pendingAssignment ? (
           <div className="mu-card assignment-accept-card">
@@ -192,77 +196,56 @@ export default function MobileDashboardPage({
         ) : null}
 
         {!needsAccept ? (
-        <div className="mu-card">
-          <div className="mu-screen-head">
-            <h3 className="mu-screen-title">{t("Trip-wise Earnings", "ట్రిప్ వారీగా సంపాదన")}</h3>
-            <span className="mu-screen-badge">{periodLabel}</span>
+          <div className="mu-card">
+            <div className="mu-screen-head">
+              <h3 className="mu-screen-title">{t("Trip-wise Earnings", "ట్రిప్ వారీగా సంపాదన")}</h3>
+              <span className="mu-screen-badge">{periodLabel}</span>
+            </div>
+            {driverEarnings.tripEarnings.map(({ trip, earning }) => (
+              <MobileTripListRow
+                key={trip.id}
+                trip={trip}
+                language={language}
+                active={selectedTripId === trip.id}
+                onClick={() => setSelectedTripId(trip.id)}
+                metaLines={[`${trip.loading_date || "-"} · ${t("Earning", "సంపాదన")}: ₹${earning.toFixed(0)}`]}
+              />
+            ))}
           </div>
-          {driverEarnings.tripEarnings.map(({ trip, earning }) => (
-            <button
-              key={trip.id}
-              type="button"
-              className={`mu-row ${selectedTripId === trip.id ? "active" : ""}`}
-              onClick={() => setSelectedTripId(trip.id)}
-            >
-              <div className="mu-row-top">
-                <span className="mu-row-title">
-                  {trip.load_location} → {trip.unload_location}
-                </span>
-                <span className="mu-status-pill">{tripStatusLabel(trip.status, language)}</span>
-              </div>
-              <p className="mu-row-meta">
-                {trip.loading_date || "-"} · {t("Earning", "సంపాదన")}: ₹{earning.toFixed(0)}
-              </p>
-            </button>
-          ))}
-        </div>
         ) : null}
 
-        {selectedTrip ? (
-          <MobileTripDetailPanel
-            trip={selectedTrip}
-            expenses={selectedExpense}
-            drivers={drivers}
-            lorries={lorries}
-            language={language}
-            userRole={userRole}
-            onUpdateTrip={onUpdateTrip}
-          />
-        ) : null}
+        <MobileTripSheet open={Boolean(selectedTrip)} onClose={closeTripSheet} language={language}>
+          {selectedTrip ? (
+            <MobileTripDetailPanel
+              trip={selectedTrip}
+              expenses={selectedExpense}
+              drivers={drivers}
+              lorries={lorries}
+              language={language}
+              userRole={userRole}
+              onUpdateTrip={onUpdateTrip}
+              inSheet
+            />
+          ) : null}
+        </MobileTripSheet>
       </div>
     );
   }
 
   return (
     <div className="mu-page">
-      {userRole === "user" ? (
-        <div className="mu-user-card">
-          <h2 className="mu-user-title">
-            {t("Hello", "నమస్కారం")}, {userName || t("User", "యూజర్")}
-          </h2>
-          <p className="mu-user-meta">{periodLabel}</p>
-          <div className="mu-user-stats">
-            <span>
-              {t("Trips", "ట్రిప్స్")}: <strong>{trips.length}</strong>
-            </span>
-            <span>
-              {t("Live", "లైవ్")}: <strong>{activeTrips.length}</strong>
-            </span>
-            <span>
-              {t("Done", "పూర్తి")}: <strong>{doneTrips.length}</strong>
-            </span>
-          </div>
-        </div>
-      ) : null}
+      <MobileHeroBanner
+        userName={userName}
+        periodLabel={periodLabel}
+        stats={heroStats}
+        language={language}
+        subtitle={t("Fleet overview for the selected period.", "ఎంచుకున్న కాలానికి ఫ్లీట్ అవలోకనం.")}
+      />
 
-      <div className="mu-stat-grid">
+      <div className="mu-stat-grid mu-stat-grid-compact">
         <div className="mu-stat-box">
           <span className="mu-stat-label">{t("Lorries", "లారీలు")}</span>
           <span className="mu-stat-value">{dashboard?.total_lorries ?? 0}</span>
-        </div>
-        <div className="mu-stat-box">
-          <span className="mu-stat-label">{t("Live", "లైవ్")}</span>
-          <span className="mu-stat-value">{activeTrips.length}</span>
         </div>
         <div className="mu-stat-box">
           <span className="mu-stat-label">{t("Drivers", "డ్రైవర్లు")}</span>
@@ -273,10 +256,6 @@ export default function MobileDashboardPage({
           <span className="mu-stat-value">₹{totalIncome.toFixed(0)}</span>
         </div>
         <div className="mu-stat-box">
-          <span className="mu-stat-label">{t("Expense", "ఖర్చు")}</span>
-          <span className="mu-stat-value">₹{totalExpenses.toFixed(0)}</span>
-        </div>
-        <div className="mu-stat-box">
           <span className="mu-stat-label">{t("Profit", "లాభం")}</span>
           <span className="mu-stat-value success">₹{totalProfit.toFixed(0)}</span>
         </div>
@@ -284,31 +263,26 @@ export default function MobileDashboardPage({
 
       <div className="mu-card">
         <div className="mu-screen-head">
-          <h3 className="mu-screen-title">{t("Active Trips", "యాక్టివ్ ట్రిప్స్")}</h3>
+          <div>
+            <h3 className="mu-screen-title">{t("Active Trips", "యాక్టివ్ ట్రిప్స్")}</h3>
+            <p className="mu-section-sub">{t("Tap a trip for details.", "వివరాల కోసం ట్రిప్‌ను ట్యాప్ చేయండి.")}</p>
+          </div>
           <span className="mu-screen-badge">{activeTrips.length}</span>
         </div>
 
         {activeTrips.length ? (
           visibleActiveTrips.map((trip) => (
-            <button
+            <MobileTripListRow
               key={trip.id}
-              type="button"
-              className={`mu-row ${selectedTripId === trip.id ? "active" : ""}`}
+              trip={trip}
+              language={language}
+              active={selectedTripId === trip.id}
               onClick={() => setSelectedTripId(trip.id)}
-            >
-              <div className="mu-row-top">
-                <span className="mu-row-title">
-                  {trip.load_location} → {trip.unload_location}
-                </span>
-                <span className="mu-status-pill">{tripStatusLabel(trip.status, language)}</span>
-              </div>
-              <p className="mu-row-meta">
-                {t("Lorry", "లారీ")} #{trip.lorry_id} · {drivers.find((d) => d.id === trip.driver_id)?.name || "-"}
-              </p>
-              <p className="mu-row-meta">
-                {trip.contact_person_phone || "-"} · {trip.loading_date || "-"}
-              </p>
-            </button>
+              metaLines={[
+                `${t("Lorry", "లారీ")} #${trip.lorry_id} · ${drivers.find((d) => d.id === trip.driver_id)?.name || "-"}`,
+                `${trip.contact_person_phone || "-"} · ${trip.loading_date || "-"}`
+              ]}
+            />
           ))
         ) : (
           <div className="mu-empty">
@@ -325,17 +299,20 @@ export default function MobileDashboardPage({
         ) : null}
       </div>
 
-      {selectedTrip ? (
-        <MobileTripDetailPanel
-          trip={selectedTrip}
-          expenses={selectedExpense}
-          drivers={drivers}
-          lorries={lorries}
-          language={language}
-          userRole={userRole}
-          onUpdateTrip={onUpdateTrip}
-        />
-      ) : null}
+      <MobileTripSheet open={Boolean(selectedTrip)} onClose={closeTripSheet} language={language}>
+        {selectedTrip ? (
+          <MobileTripDetailPanel
+            trip={selectedTrip}
+            expenses={selectedExpense}
+            drivers={drivers}
+            lorries={lorries}
+            language={language}
+            userRole={userRole}
+            onUpdateTrip={onUpdateTrip}
+            inSheet
+          />
+        ) : null}
+      </MobileTripSheet>
 
       {statusSummary.length ? (
         <div className="mu-card">

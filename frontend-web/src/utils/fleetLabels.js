@@ -23,6 +23,17 @@ export function tripStatusLabel(status, language = "en") {
   return status;
 }
 
+export function tripStatusClass(status) {
+  const map = {
+    Loading: "status-loading",
+    "On route": "status-route",
+    Unloading: "status-unloading",
+    Delivered: "status-delivered",
+    "Trip Done": "status-done"
+  };
+  return map[status] || "status-neutral";
+}
+
 export function lorryTypeLabel(type, language = "en") {
   if (!type) return "";
   if (language === "te") return LORRY_TYPE_TE[type] || type;

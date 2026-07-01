@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { colors, radius, typography } from "../theme";
-import { space, ui } from "../mobileUi";
+import { space, ui, tripStatusTone } from "../mobileUi";
 import { getPeriodLabel } from "../utils/periodFilter";
 import { TRIP_STATUSES, tripStatusLabel } from "../utils/fleetLabels";
 import { computeDriverEarningsSummary, computeAssignmentPaySummary, formatAssignmentPeriod, driverNeedsAssignmentAccept, getDriverActiveAssignment } from "../utils/driverEarnings";
@@ -84,13 +84,13 @@ export default function DashboardScreen({
     const highlight = assignmentPay.active || assignmentPay.latest;
     return (
       <View style={ui.page}>
-        <View style={styles.userCard}>
-          <Text style={styles.userTitle}>{t("Hello", "నమస్కారం")}, {userName || t("Driver", "డ్రైవర్")}</Text>
-          <Text style={styles.userMeta}>{periodLabel}</Text>
-          <View style={styles.userStats}>
-            <Text style={styles.userStatItem}>{t("My Trips", "నా ట్రిప్స్")}: <Text style={styles.userStatVal}>{driverEarnings.tripCount}</Text></Text>
-            <Text style={styles.userStatItem}>{t("Live", "లైవ్")}: <Text style={styles.userStatVal}>{driverEarnings.activeTripCount}</Text></Text>
-            <Text style={styles.userStatItem}>{t("Done", "పూర్తి")}: <Text style={styles.userStatVal}>{driverEarnings.doneTripCount}</Text></Text>
+        <View style={ui.heroCard}>
+          <Text style={ui.heroTitle}>{t("Hello", "నమస్కారం")}, {userName || t("Driver", "డ్రైవర్")}</Text>
+          <Text style={ui.heroMeta}>{periodLabel}</Text>
+          <View style={styles.heroStats}>
+            <Text style={styles.heroStatItem}>{t("My Trips", "నా ట్రిప్స్")}: <Text style={styles.heroStatVal}>{driverEarnings.tripCount}</Text></Text>
+            <Text style={styles.heroStatItem}>{t("Live", "లైవ్")}: <Text style={styles.heroStatVal}>{driverEarnings.activeTripCount}</Text></Text>
+            <Text style={styles.heroStatItem}>{t("Done", "పూర్తి")}: <Text style={styles.heroStatVal}>{driverEarnings.doneTripCount}</Text></Text>
           </View>
         </View>
 
@@ -192,7 +192,7 @@ export default function DashboardScreen({
                 <Text style={ui.title} numberOfLines={1}>
                   {trip.load_location} → {trip.unload_location}
                 </Text>
-                <Text style={ui.status}>{tripStatusLabel(trip.status, language)}</Text>
+                <Text style={[ui.status, tripStatusTone(trip.status)]}>{tripStatusLabel(trip.status, language)}</Text>
               </View>
               <Text style={ui.meta}>
                 {trip.loading_date || "-"} · {t("Earning", "సంపాదన")}: ₹{earning.toFixed(0)}
@@ -275,7 +275,7 @@ export default function DashboardScreen({
                 <Text style={ui.title} numberOfLines={1}>
                   {trip.load_location} → {trip.unload_location}
                 </Text>
-                <Text style={ui.status}>{tripStatusLabel(trip.status, language)}</Text>
+                <Text style={[ui.status, tripStatusTone(trip.status)]}>{tripStatusLabel(trip.status, language)}</Text>
               </View>
               <Text style={ui.meta}>
                 {t("Lorry", "లారీ")} #{trip.lorry_id} · {drivers.find((d) => d.id === trip.driver_id)?.name || "-"}
@@ -349,6 +349,26 @@ const styles = StyleSheet.create({
     fontSize: typography.sm,
     color: colors.primaryDark,
     fontWeight: "700"
+  },
+  heroStats: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+    marginTop: 8
+  },
+  heroStatItem: {
+    fontSize: 11,
+    fontWeight: "700",
+    color: "rgba(255,255,255,0.9)",
+    backgroundColor: "rgba(255,255,255,0.16)",
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: radius.pill,
+    overflow: "hidden"
+  },
+  heroStatVal: {
+    fontWeight: "800",
+    color: "#fff"
   },
   userStats: {
     flexDirection: "row",

@@ -1,11 +1,11 @@
 export const colors = {
-  primary: "#2563EB",
-  primaryDark: "#1D4ED8",
+  primary: "#1D4ED8",
+  primaryDark: "#1E3A8A",
   primarySoft: "#EFF6FF",
   primaryMuted: "#BFDBFE",
   accent: "#0EA5E9",
   accentSoft: "#E0F2FE",
-  background: "#F6F8FC",
+  background: "#F4F7FB",
   backgroundStrong: "#FFFFFF",
   surface: "#FFFFFF",
   surfaceSoft: "#F8FAFC",
@@ -22,8 +22,8 @@ export const colors = {
   warningSoft: "#FFFBEB",
   danger: "#DC2626",
   dangerSoft: "#FEE2E2",
-  shadow: "rgba(15, 23, 42, 0.08)",
-  overlay: "rgba(15, 23, 42, 0.45)"
+  shadow: "rgba(15, 23, 42, 0.1)",
+  overlay: "rgba(15, 23, 42, 0.5)"
 };
 
 export const radius = {

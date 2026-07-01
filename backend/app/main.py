@@ -198,6 +198,84 @@ def serialize_assignments_list(
     ]
 
 
+COMMISSION_TRANSPORT_THRESHOLD = 120_000.0
+
+
+def stint_commission_total(total_transport: float, commission_percent: float) -> float:
+    transport = float(total_transport or 0)
+    percent = float(commission_percent or 0)
+    if transport < COMMISSION_TRANSPORT_THRESHOLD:
+        return 0.0
+    return round_money(transport * percent / 100)
+
+
+def trip_commission_allocations(trips: list[Trip], commission_percent: float) -> dict[int, float]:
+    ordered = sorted(trips, key=lambda item: (item.loading_date or date.min, item.id))
+    total_transport = sum(float(item.load_price or 0) for item in ordered)
+    stint_commission = stint_commission_total(total_transport, commission_percent)
+    if stint_commission <= 0 or total_transport <= 0:
+        return {item.id: 0.0 for item in ordered}
+    return {
+        item.id: round_money(stint_commission * (float(item.load_price or 0) / total_transport))
+        for item in ordered
+    }
+
+
+def assignment_for_trip(db: Session, trip: Trip) -> DriverAssignment | None:
+    assignments = (
+        db.query(DriverAssignment)
+        .filter(DriverAssignment.driver_id == trip.driver_id, DriverAssignment.lorry_id == trip.lorry_id)
+        .order_by(DriverAssignment.assigned_at.desc())
+        .all()
+    )
+    for assignment in assignments:
+        if trip_matches_assignment_window(trip, assignment):
+            return assignment
+    return None
+
+
+def commission_for_trip_in_stint(
+    db: Session,
+    trip: Trip,
+    commission_percent: float | None = None,
+) -> float:
+    assignment = assignment_for_trip(db, trip)
+    if not assignment:
+        return 0.0
+    percent = float(
+        commission_percent if commission_percent is not None else assignment.commission_percent or 0
+    )
+    stint_trips = assignment_trips_for(db, assignment)
+    allocations = trip_commission_allocations(stint_trips, percent)
+    return allocations.get(trip.id, 0.0)
+
+
+def sync_stint_trip_commissions(db: Session, trip: Trip) -> None:
+    assignment = assignment_for_trip(db, trip)
+    if not assignment:
+        return
+    stint_trips = assignment_trips_for(db, assignment)
+    percent = float(assignment.commission_percent or 0)
+    allocations = trip_commission_allocations(stint_trips, percent)
+    for stint_trip in stint_trips:
+        expenses = db.query(Expense).filter(Expense.trip_id == stint_trip.id).order_by(Expense.id.asc()).all()
+        for expense in expenses:
+            expense.driver_commission_percent = percent
+            expense.driver_commission_amount = allocations.get(stint_trip.id, 0.0)
+
+
+def reconcile_all_stint_commissions(db: Session) -> None:
+    seen_assignment_ids: set[int] = set()
+    trips = db.query(Trip).order_by(Trip.id.asc()).all()
+    for trip in trips:
+        assignment = assignment_for_trip(db, trip)
+        if not assignment or assignment.id in seen_assignment_ids:
+            continue
+        sync_stint_trip_commissions(db, trip)
+        seen_assignment_ids.add(assignment.id)
+    db.commit()
+
+
 def trip_matches_assignment_window(trip: Trip, assignment: DriverAssignment) -> bool:
     trip_day = (
         trip.loading_date
@@ -222,7 +300,13 @@ def assignment_trips_for(db: Session, assignment: DriverAssignment) -> list[Trip
     return [trip for trip in trips if trip_matches_assignment_window(trip, assignment)]
 
 
-def serialize_assignment_trip(trip: Trip, commission_percent: float) -> DriverAssignmentTripOut:
+def serialize_assignment_trip(
+    trip: Trip,
+    commission_percent: float,
+    commission_amount: float,
+    *,
+    commission_eligible: bool,
+) -> DriverAssignmentTripOut:
     load_price = float(trip.load_price or 0)
     percent = float(commission_percent or 0)
     return DriverAssignmentTripOut(
@@ -231,7 +315,8 @@ def serialize_assignment_trip(trip: Trip, commission_percent: float) -> DriverAs
         load_price=load_price,
         working_days=trip_working_days(trip),
         commission_percent=percent,
-        commission_amount=round_money(load_price * (percent / 100)),
+        commission_amount=commission_amount,
+        commission_eligible=commission_eligible,
         loading_date=trip.loading_date,
         unloading_date=trip.unloading_date,
         status=trip.status,
@@ -278,9 +363,19 @@ def serialize_assignment(
     working_days = max(total_days - leave_days, 0)
     assignment_trips = assignment_trips_for(db, assignment)
     commission_percent = float(assignment.commission_percent or 0)
-    trip_items = [serialize_assignment_trip(trip, commission_percent) for trip in assignment_trips]
-    total_transport_amount = round_money(sum(item.load_price for item in trip_items))
-    commission_amount = round_money(sum(item.commission_amount for item in trip_items))
+    total_transport_amount = round_money(sum(float(trip.load_price or 0) for trip in assignment_trips))
+    commission_eligible = total_transport_amount >= COMMISSION_TRANSPORT_THRESHOLD
+    allocations = trip_commission_allocations(assignment_trips, commission_percent)
+    trip_items = [
+        serialize_assignment_trip(
+            trip,
+            commission_percent,
+            allocations.get(trip.id, 0.0),
+            commission_eligible=commission_eligible,
+        )
+        for trip in assignment_trips
+    ]
+    commission_amount = stint_commission_total(total_transport_amount, commission_percent)
     wage_amount = round_money(working_days * float(assignment.daily_wage or 0))
     accepted = bool(assignment.driver_accepted)
     earnings_visible = accepted or viewer_role in {"user", "admin"}
@@ -303,6 +398,8 @@ def serialize_assignment(
         wage_amount=wage_amount if earnings_visible else 0,
         commission_amount=commission_amount if earnings_visible else 0,
         total_earning=(wage_amount + commission_amount) if earnings_visible else 0,
+        commission_transport_threshold=COMMISSION_TRANSPORT_THRESHOLD,
+        commission_eligible=commission_eligible if earnings_visible else False,
         gap_days_before=gap_days_before if gap_days_before is not None else assignment_gap_days_before(db, assignment),
         is_current_stint=is_current_stint,
         driver_accepted=accepted,
@@ -797,6 +894,11 @@ def startup_seed():
     ensure_user_account_driver_column()
     ensure_default_users()
     ensure_demo_driver_logins()
+    db = SessionLocal()
+    try:
+        reconcile_all_stint_commissions(db)
+    finally:
+        db.close()
 
 
 def ensure_default_users() -> None:
@@ -1248,31 +1350,11 @@ def delete_driver_and_related(
     driver_id = driver.id
     driver_name = driver.name
 
-    active_trip = (
-        scoped_query(db.query(Trip), Trip, db, viewer, role, scope_user)
-        .filter(
-            Trip.driver_id == driver_id,
-            Trip.status.notin_(["Delivered", "Trip Done"]),
-        )
-        .first()
-    )
-    if active_trip:
-        raise HTTPException(
-            status_code=400,
-            detail="Cannot delete driver with an active trip. Complete or reassign the trip first.",
-        )
-
-    complete_active_assignments_for_driver(db, driver_id, datetime.utcnow())
-
-    trip_ids = [
-        trip.id
-        for trip in scoped_query(db.query(Trip), Trip, db, viewer, role, scope_user)
-        .filter(Trip.driver_id == driver_id)
-        .all()
-    ]
+    trip_ids = [trip.id for trip in db.query(Trip).filter(Trip.driver_id == driver_id).all()]
     if trip_ids:
         db.query(Expense).filter(Expense.trip_id.in_(trip_ids)).delete(synchronize_session=False)
         db.query(Trip).filter(Trip.id.in_(trip_ids)).delete(synchronize_session=False)
+        db.expire_all()
 
     assignment_ids = [
         item.id for item in db.query(DriverAssignment).filter(DriverAssignment.driver_id == driver_id).all()
@@ -1362,15 +1444,13 @@ def get_driver_history(
             .filter(Expense.trip_id == trip.id)
             .all()
         )
-        commission_amount = sum(float(item.driver_commission_amount or 0) for item in expenses)
+        commission_amount = commission_for_trip_in_stint(db, trip)
         transport_amount = float(trip.load_price or 0)
         working_days = trip_working_days(trip)
-        driver_earned = sum(
-            float(item.driver_bata or 0)
-            + float(item.driver_daily_wage or 0)
-            + float(item.driver_commission_amount or 0)
-            for item in expenses
+        non_commission_earning = sum(
+            float(item.driver_bata or 0) + float(item.driver_daily_wage or 0) for item in expenses
         )
+        driver_earned = round_money(non_commission_earning + commission_amount)
         trip_total_earning = driver_earned
 
         total_working_days += working_days
@@ -1378,6 +1458,13 @@ def get_driver_history(
         total_commission_amount += commission_amount
         total_driver_earning += driver_earned
         total_company_net += company_net
+        stint_assignment = assignment_for_trip(db, trip)
+        stint_transport = 0.0
+        if stint_assignment:
+            stint_transport = sum(
+                float(item.load_price or 0) for item in assignment_trips_for(db, stint_assignment)
+            )
+        commission_eligible = stint_transport >= COMMISSION_TRANSPORT_THRESHOLD
         history_items.append(
             {
                 "trip_id": trip.id,
@@ -1388,6 +1475,7 @@ def get_driver_history(
                 "working_days": working_days,
                 "transport_amount": transport_amount,
                 "commission_amount": commission_amount,
+                "commission_eligible": commission_eligible,
                 "trip_total_earning": trip_total_earning,
                 "load_price": trip.load_price,
                 "trip_expenses": trip_expenses,
@@ -1419,6 +1507,7 @@ def get_driver_history(
         total_assignment_wage=total_assignment_wage,
         total_assignment_commission=total_assignment_commission,
         total_assignment_earning=total_assignment_earning,
+        commission_transport_threshold=COMMISSION_TRANSPORT_THRESHOLD,
         assignments=assignment_items,
         trips=history_items,
     )
@@ -1487,6 +1576,26 @@ def mark_all_notifications_read(
     )
     db.commit()
     return {"ok": True}
+
+
+@app.delete("/notifications")
+def clear_all_notifications(
+    viewer: str | None = None,
+    role: str | None = None,
+    scope_user: str | None = None,
+    db: Session = Depends(get_db),
+):
+    ctx = build_auth_context(db, viewer, role, scope_user)
+    recipient = notification_recipient(ctx)
+    if not recipient:
+        raise HTTPException(status_code=403, detail="Notifications are available to fleet users only")
+    deleted = (
+        db.query(Notification)
+        .filter(Notification.recipient == recipient)
+        .delete(synchronize_session=False)
+    )
+    db.commit()
+    return {"ok": True, "deleted": deleted}
 
 
 @app.get("/driver-assignments", response_model=List[DriverAssignmentOut])
@@ -1758,8 +1867,32 @@ def update_driver_assignment(
 
 
 @app.post("/lorries", response_model=LorryOut)
-def create_lorry(payload: LorryCreate, viewer: str | None = None, db: Session = Depends(get_db)):
-    lorry = Lorry(**payload.model_dump())
+def create_lorry(
+    payload: LorryCreate,
+    viewer: str | None = None,
+    role: str | None = None,
+    scope_user: str | None = None,
+    db: Session = Depends(get_db),
+):
+    ctx = build_auth_context(db, viewer, role, scope_user)
+    if ctx["role"] not in {"user", "admin"}:
+        raise HTTPException(status_code=403, detail="Only fleet owners can add lorries")
+    if ctx["role"] == "admin" and not ctx["owner"]:
+        raise HTTPException(status_code=400, detail="Select a user before adding lorries")
+
+    vehicle_number = (payload.vehicle_number or "").strip()
+    if not vehicle_number:
+        raise HTTPException(status_code=400, detail="Vehicle number is required")
+
+    existing = db.query(Lorry).filter(Lorry.vehicle_number == vehicle_number).first()
+    if existing:
+        raise HTTPException(status_code=400, detail="Vehicle number already exists")
+
+    lorry = Lorry(
+        vehicle_number=vehicle_number,
+        current_location=(payload.current_location or "").strip() or None,
+        driver_id=payload.driver_id,
+    )
     lorry.created_by = write_owner(db, viewer, role, scope_user)
     db.add(lorry)
     db.commit()
@@ -1788,6 +1921,70 @@ def update_lorry_status(
     db.commit()
     db.refresh(lorry)
     return lorry
+
+
+def delete_lorry_and_related(
+    db: Session,
+    lorry: Lorry,
+) -> str:
+    lorry_id = lorry.id
+    vehicle_number = lorry.vehicle_number
+
+    active_trip = (
+        db.query(Trip)
+        .filter(
+            Trip.lorry_id == lorry_id,
+            Trip.status.notin_(["Delivered", "Trip Done"]),
+        )
+        .first()
+    )
+    if active_trip:
+        raise HTTPException(
+            status_code=400,
+            detail="Cannot delete lorry with an active trip. Complete or reassign the trip first.",
+        )
+
+    trip_ids = [trip.id for trip in db.query(Trip).filter(Trip.lorry_id == lorry_id).all()]
+    if trip_ids:
+        db.query(Expense).filter(Expense.trip_id.in_(trip_ids)).delete(synchronize_session=False)
+        db.query(Trip).filter(Trip.id.in_(trip_ids)).delete(synchronize_session=False)
+        db.expire_all()
+
+    assignment_ids = [
+        item.id for item in db.query(DriverAssignment).filter(DriverAssignment.lorry_id == lorry_id).all()
+    ]
+    if assignment_ids:
+        db.query(DriverAssignmentLeave).filter(
+            DriverAssignmentLeave.assignment_id.in_(assignment_ids)
+        ).delete(synchronize_session=False)
+        db.query(DriverAssignment).filter(DriverAssignment.id.in_(assignment_ids)).delete(synchronize_session=False)
+
+    db.delete(lorry)
+    db.flush()
+    return vehicle_number
+
+
+@app.delete("/lorries/{lorry_id}")
+def delete_lorry(
+    lorry_id: int,
+    viewer: str | None = None,
+    role: str | None = None,
+    scope_user: str | None = None,
+    db: Session = Depends(get_db),
+):
+    ctx = build_auth_context(db, viewer, role, scope_user)
+    if ctx["role"] not in {"user", "admin"}:
+        raise HTTPException(status_code=403, detail="Only fleet owners can delete lorries")
+    if ctx["role"] == "admin" and not ctx["owner"]:
+        raise HTTPException(status_code=400, detail="Select a user before deleting lorries")
+
+    lorry = scoped_query(db.query(Lorry), Lorry, db, viewer, role, scope_user).filter(Lorry.id == lorry_id).first()
+    if not lorry:
+        raise HTTPException(status_code=404, detail="Lorry not found")
+
+    vehicle_number = delete_lorry_and_related(db, lorry)
+    db.commit()
+    return {"ok": True, "message": f"Lorry {vehicle_number} deleted successfully."}
 
 
 @app.get("/lorries/{lorry_id}/history", response_model=LorryHistoryOut)
@@ -1934,12 +2131,7 @@ def upsert_trip_expense(
     for key, value in data.items():
         setattr(expense, key, round_money(value))
 
-    commission_percent = float(expense.driver_commission_percent or 0)
-    if commission_percent > 0 and "driver_commission_amount" not in data:
-        expense.driver_commission_amount = round_money((float(trip.load_price or 0) * commission_percent) / 100)
-    elif "driver_commission_percent" in data and "driver_commission_amount" not in data:
-        if commission_percent > 0:
-            expense.driver_commission_amount = round_money((float(trip.load_price or 0) * commission_percent) / 100)
+    sync_stint_trip_commissions(db, trip)
 
 
 def apply_trip_save(
@@ -1954,6 +2146,8 @@ def apply_trip_save(
     expense_block = data.pop("expense", None)
     if data:
         apply_trip_update(trip, TripUpdate(**data))
+        if "load_price" in data:
+            sync_stint_trip_commissions(db, trip)
     if expense_block:
         upsert_trip_expense(db, trip, TripExpenseUpdate(**expense_block), viewer, role, scope_user)
     if not data and not expense_block:
@@ -2041,15 +2235,17 @@ def add_expense(payload: ExpenseCreate, viewer: str | None = None, role: str | N
 
     payload_data = payload.model_dump()
     commission_percent = float(payload_data.get("driver_commission_percent") or 0)
-    commission_amount = float(payload_data.get("driver_commission_amount") or 0)
-    if commission_percent > 0 and commission_amount == 0:
-        commission_amount = round_money((trip.load_price * commission_percent) / 100)
-    payload_data["driver_commission_amount"] = commission_amount
+    assignment = assignment_for_trip(db, trip)
+    if assignment and not commission_percent:
+        commission_percent = float(assignment.commission_percent or 0)
+    payload_data["driver_commission_percent"] = commission_percent
+    payload_data["driver_commission_amount"] = commission_for_trip_in_stint(db, trip, commission_percent)
     payload_data["proof_images_json"] = json.dumps(payload_data.pop("proof_images", []) or [])
 
     expense = Expense(**payload_data)
     expense.created_by = write_owner(db, viewer, role, scope_user)
     db.add(expense)
+    sync_stint_trip_commissions(db, trip)
     if role == "driver":
         notify_driver_owner(
             db,

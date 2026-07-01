@@ -8,6 +8,7 @@ export default function NotificationBell({
   onClose,
   onMarkRead,
   onMarkAllRead,
+  onClearAll,
   language = "en"
 }) {
   const t = (en, te) => (language === "te" ? te : en);
@@ -43,11 +44,18 @@ export default function NotificationBell({
         <div className="notification-panel">
           <div className="notification-panel-head">
             <strong>{t("Notifications", "నోటిఫికేషన్లు")}</strong>
-            {unreadCount > 0 ? (
-              <button type="button" className="ghost compact-submit" onClick={onMarkAllRead}>
-                {t("Mark all read", "అన్నీ చదివినవి")}
-              </button>
-            ) : null}
+            <div className="notification-panel-actions">
+              {unreadCount > 0 ? (
+                <button type="button" className="ghost compact-submit" onClick={onMarkAllRead}>
+                  {t("Mark all read", "అన్నీ చదివినవి")}
+                </button>
+              ) : null}
+              {notifications.length > 0 ? (
+                <button type="button" className="ghost compact-submit notification-clear-btn" onClick={onClearAll}>
+                  {t("Clear all", "అన్నీ తొలగించు")}
+                </button>
+              ) : null}
+            </div>
           </div>
           <div className="notification-list">
             {notifications.length ? (

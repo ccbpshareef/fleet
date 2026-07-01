@@ -142,8 +142,9 @@ button:disabled {
 }
 
 .ghost:hover {
-  background: #fff;
-  color: #7c2d12;
+  background: var(--primary-soft);
+  color: var(--primary-dark);
+  border-color: var(--primary-muted);
 }
 
 .highlight {
@@ -1098,16 +1099,44 @@ button:disabled {
 
 .dashboard-highlight-row {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 8px;
   margin-top: 12px;
 }
 
 .dashboard-highlight-card {
-  padding: 12px;
+  padding: 10px 12px;
   border-radius: 14px;
   border: 1px solid #dbeafe;
   background: linear-gradient(160deg, #ffffff 0%, #eff6ff 100%);
+}
+
+.dashboard-highlight-card span {
+  display: block;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--muted);
+  margin-bottom: 4px;
+}
+
+.dashboard-highlight-card strong {
+  font-size: 22px;
+  font-weight: 800;
+  line-height: 1;
+  color: var(--text);
+}
+
+.dashboard-hero .dashboard-highlight-card {
+  border-color: rgba(255, 255, 255, 0.55);
+  background: rgba(255, 255, 255, 0.94);
+}
+
+.dashboard-hero .dashboard-highlight-card span {
+  color: #64748b;
+}
+
+.dashboard-hero .dashboard-highlight-card strong {
+  color: #0f172a;
 }
 
 .dashboard-hero-art {
@@ -4532,11 +4561,13 @@ button:disabled {
 
 .workspace-filters-wrap {
   display: flex;
-  flex-direction: column;
-  gap: 6px;
-  margin-bottom: 6px;
-  padding: 8px 10px;
-  border-radius: 14px;
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 18px;
+  margin-bottom: 8px;
+  padding: 6px 10px;
+  border-radius: 12px;
   border: 1px solid rgba(191, 219, 254, 0.55);
   background: rgba(255, 255, 255, 0.82);
   backdrop-filter: blur(8px);
@@ -4544,7 +4575,75 @@ button:disabled {
 }
 
 .workspace-filters-wrap .m-filter-bar {
-  gap: 3px;
+  flex: 1 1 280px;
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.workspace-filters-wrap .m-filter-caption {
+  flex: 0 0 auto;
+  margin: 0;
+  min-width: 42px;
+  font-size: 9px;
+}
+
+.workspace-filters-wrap .m-filter-scroll {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.workspace-filters-wrap .m-filter-chip {
+  min-height: 26px;
+  padding: 3px 10px;
+  font-size: 11px;
+}
+
+.dashboard-mini-stats {
+  margin: 0;
+}
+
+.dashboard-mini-stats .dashboard-highlight-card {
+  padding: 10px 12px;
+}
+
+.dashboard-mini-stats .dashboard-highlight-card span {
+  font-size: 11px;
+}
+
+.dashboard-mini-stats .dashboard-highlight-card strong {
+  font-size: 20px;
+}
+
+.mu-trip-summary {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.mu-trip-summary-card {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 10px 12px;
+  border-radius: 14px;
+  border: 1px solid rgba(191, 219, 254, 0.7);
+  background: linear-gradient(160deg, #ffffff 0%, #eff6ff 100%);
+}
+
+.mu-trip-summary-card span {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--muted);
+}
+
+.mu-trip-summary-card strong {
+  font-size: 18px;
+  font-weight: 800;
+  color: var(--text);
 }
 
 .dashboard-empty-card {
@@ -4816,6 +4915,26 @@ button:disabled {
   position: sticky;
   top: 0;
   background: #fff;
+}
+
+.notification-panel-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
+.notification-clear-btn,
+.notification-clear-inline {
+  color: #b91c1c;
+  border-color: rgba(248, 113, 113, 0.45);
+}
+
+.notification-clear-inline {
+  min-height: 34px;
+  padding: 6px 10px;
+  font-size: 11px;
+  width: auto;
 }
 
 .notification-list {

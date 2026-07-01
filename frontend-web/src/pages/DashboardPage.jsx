@@ -3,6 +3,7 @@ import TripDetailPanel from "../components/TripDetailPanel";
 import { TRIP_STATUSES, tripStatusLabel } from "../utils/fleetLabels";
 import { computeDriverEarningsSummary, computeAssignmentPaySummary, formatAssignmentPeriod, driverNeedsAssignmentAccept, getDriverActiveAssignment } from "../utils/driverEarnings";
 import { getPeriodLabel } from "../utils/periodFilter";
+import { commissionProgressText, commissionRuleText } from "../utils/commission";
 
 export default function DashboardPage({
   dashboard,
@@ -25,14 +26,6 @@ export default function DashboardPage({
   const periodLabel = getPeriodLabel(periodFilter, language);
   const isDriver = userRole === "driver";
   const activeTrips = trips.filter((trip) => trip.status !== "Delivered" && trip.status !== "Trip Done");
-  const now = new Date();
-  const thisMonthTrips = trips.filter((trip) => {
-    const sourceDate = trip.loading_date || trip.unloading_date || trip.completed_at;
-    if (!sourceDate) return false;
-    const parsed = new Date(sourceDate);
-    if (Number.isNaN(parsed.getTime())) return false;
-    return parsed.getMonth() === now.getMonth() && parsed.getFullYear() === now.getFullYear();
-  });
   const completedTrips = trips.length - activeTrips.length;
   const [selectedTripId, setSelectedTripId] = useState(activeTrips[0]?.id || null);
   const [showAllActiveTrips, setShowAllActiveTrips] = useState(false);
@@ -111,21 +104,18 @@ export default function DashboardPage({
     );
     return (
       <section className="dashboard-stack">
-        <div className="panel dashboard-user-card">
-          <h2>
-            {t("Hello", "నమస్కారం")}, {userName || t("Driver", "డ్రైవర్")}
-          </h2>
-          <p className="muted">{periodLabel}</p>
-          <div className="dashboard-user-stats">
-            <span>
-              {t("My Trips", "నా ట్రిప్స్")}: <strong>{driverEarnings.tripCount}</strong>
-            </span>
-            <span>
-              {t("Live", "లైవ్")}: <strong>{driverEarnings.activeTripCount}</strong>
-            </span>
-            <span>
-              {t("Done", "పూర్తి")}: <strong>{driverEarnings.doneTripCount}</strong>
-            </span>
+        <div className="dashboard-highlight-row dashboard-mini-stats">
+          <div className="dashboard-highlight-card">
+            <span>🚚 {t("My Trips", "నా ట్రిప్స్")}</span>
+            <strong>{driverEarnings.tripCount}</strong>
+          </div>
+          <div className="dashboard-highlight-card">
+            <span>📡 {t("Live", "లైవ్")}</span>
+            <strong>{driverEarnings.activeTripCount}</strong>
+          </div>
+          <div className="dashboard-highlight-card">
+            <span>✅ {t("Done", "పూర్తి")}</span>
+            <strong>{driverEarnings.doneTripCount}</strong>
           </div>
         </div>
 
@@ -257,7 +247,10 @@ export default function DashboardPage({
                   highlight.trips.map((trip) => (
                     <div className="assignment-trip-row" key={trip.trip_id}>
                       <span>{trip.route}</span>
-                      <span>Rs {Number(trip.load_price || 0).toFixed(0)} × {trip.commission_percent}%</span>
+                      <span>
+                        Rs {Number(trip.load_price || 0).toFixed(0)}
+                        {trip.commission_eligible ? ` × ${trip.commission_percent}%` : ""}
+                      </span>
                       <strong>{formatCurrency(trip.commission_amount)}</strong>
                     </div>
                   ))
@@ -265,6 +258,10 @@ export default function DashboardPage({
                   <p className="muted">{t("No trips in current stint yet", "ప్రస్తుత కాలంలో ట్రిప్స్ లేవు")}</p>
                 )}
               </div>
+              {highlight && !highlight.commission_eligible ? (
+                <p className="muted">{commissionProgressText(highlight.total_transport_amount, language)}</p>
+              ) : null}
+              <p className="muted">{commissionRuleText(language)}</p>
             </div>
           </>
         ) : !needsAccept ? (
@@ -334,33 +331,17 @@ export default function DashboardPage({
 
   return (
     <section className="dashboard-stack">
-      {userRole === "user" ? (
-        <div className="panel dashboard-user-card">
-          <h2>
-            {t("Hello", "నమస్కారం")}, {userName || t("User", "యూజర్")}
-          </h2>
-          <p className="muted">{periodLabel}</p>
-          <div className="dashboard-user-stats">
-            <span>
-              {t("Trips", "ట్రిప్స్")}: <strong>{trips.length}</strong>
-            </span>
-            <span>
-              {t("Live", "లైవ్")}: <strong>{activeTrips.length}</strong>
-            </span>
-            <span>
-              {t("Done", "పూర్తి")}: <strong>{completedTrips}</strong>
-            </span>
-          </div>
-        </div>
-      ) : null}
       <div className="panel dashboard-hero">
         <div className="dashboard-hero-copy">
           <span className="status-pill status-neutral">{today}</span>
-          <h2>{t("Welcome, Owner", "స్వాగతం, యజమాని")}</h2>
+          <h2>
+            {t("Welcome", "స్వాగతం")}, {userName || t("Owner", "యజమాని")}
+          </h2>
           <p className="muted dashboard-hero-text">
+            {periodLabel} ·{" "}
             {t(
-              "Run dispatch, monitor active trips, and keep an eye on profit without jumping between screens.",
-              "డిస్పాచ్, యాక్టివ్ ట్రిప్స్ మరియు లాభాన్ని ఒకే చోట నుండి సులభంగా గమనించండి."
+              "Run dispatch, monitor active trips, and keep an eye on profit.",
+              "డిస్పాచ్, యాక్టివ్ ట్రిప్స్ మరియు లాభాన్ని ఒకే చోట నుండి గమనించండి."
             )}
           </p>
           <div className="dashboard-hero-actions">
@@ -369,16 +350,16 @@ export default function DashboardPage({
           </div>
           <div className="dashboard-highlight-row">
             <div className="dashboard-highlight-card">
-              <span>🚚 {t("Trips This Month", "ఈ నెల ట్రిప్స్")}</span>
-              <strong>{thisMonthTrips.length}</strong>
+              <span>🚚 {t("Trips", "ట్రిప్స్")}</span>
+              <strong>{trips.length}</strong>
             </div>
             <div className="dashboard-highlight-card">
-              <span>🚛 {t("Live Fleet", "లైవ్ ఫ్లీట్")}</span>
-              <strong>{dashboard?.total_lorries ?? lorries.length}</strong>
+              <span>📡 {t("Live", "లైవ్")}</span>
+              <strong>{activeTrips.length}</strong>
             </div>
             <div className="dashboard-highlight-card">
-              <span>💸 {t("Profit Snapshot", "లాభ స్నాప్‌షాట్")}</span>
-              <strong>{formatCurrency(totalProfit)}</strong>
+              <span>✅ {t("Done", "పూర్తి")}</span>
+              <strong>{completedTrips}</strong>
             </div>
           </div>
         </div>

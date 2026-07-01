@@ -201,6 +201,7 @@ class DriverAssignmentTripOut(BaseModel):
     working_days: int = 0
     commission_percent: float = 0
     commission_amount: float = 0
+    commission_eligible: bool = False
     loading_date: Optional[date] = None
     unloading_date: Optional[date] = None
     status: str = ""
@@ -224,6 +225,8 @@ class DriverAssignmentOut(BaseModel):
     wage_amount: float = 0
     commission_amount: float = 0
     total_earning: float = 0
+    commission_transport_threshold: float = 120_000
+    commission_eligible: bool = False
     gap_days_before: int = 0
     is_current_stint: bool = False
     driver_accepted: bool = False
@@ -263,6 +266,7 @@ class DriverTripHistoryItem(BaseModel):
     working_days: int = 0
     transport_amount: float = 0
     commission_amount: float = 0
+    commission_eligible: bool = False
     trip_total_earning: float = 0
     load_price: float
     trip_expenses: float
@@ -284,6 +288,7 @@ class DriverHistoryOut(BaseModel):
     total_assignment_wage: float = 0
     total_assignment_commission: float = 0
     total_assignment_earning: float = 0
+    commission_transport_threshold: float = 120_000
     assignments: list[DriverAssignmentOut] = []
     trips: list[DriverTripHistoryItem]
 

@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useToast } from "./ToastProvider";
 import { TRIP_STATUSES, tripStatusLabel } from "../utils/fleetLabels";
 import { expenseFieldsForRole } from "../utils/tripExpenseEdit";
 import { buildTripUpdatePayload, expenseDraftFromTotals, toDateInputValue } from "../utils/tripUpdate";
@@ -29,6 +30,7 @@ export default function TripDetailPanel({
   onUpdateTrip
 }) {
   const t = (en, te) => (language === "te" ? te : en);
+  const showToast = useToast();
   const isDriver = userRole === "driver";
   const visibleExpenseFields = expenseFieldsForRole(userRole);
   const myEarning = tripDriverEarning(expenses);
@@ -80,7 +82,7 @@ export default function TripDetailPanel({
       await onUpdateTrip(trip.id, updatePayload);
       setIsEditing(false);
     } catch (error) {
-      alert(error.message || t("Failed to update trip", "ట్రిప్ అప్డేట్ విఫలమైంది"));
+      showToast(error.message || t("Failed to update trip", "ట్రిప్ అప్డేట్ విఫలమైంది"), "error");
     } finally {
       setIsSaving(false);
     }

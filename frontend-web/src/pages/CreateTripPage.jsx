@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { TRIP_STATUSES, tripStatusLabel } from "../utils/fleetLabels";
+import { commissionRuleText } from "../utils/commission";
 import { moneyInputValue, roundMoney, tripCalendarDays } from "../utils/money";
 
 function formatStorageDate(date) {
@@ -142,11 +143,13 @@ export default function CreateTripPage({ form, setForm, lorries, drivers, onSubm
   function updateField(field, value) {
     const nextForm = { ...form, [field]: value };
     if (field === "load_price" || field === "driver_commission_percent") {
-      const loadPrice = Number(field === "load_price" ? value : nextForm.load_price || 0);
-      const commissionPercent = Number(field === "driver_commission_percent" ? value : nextForm.driver_commission_percent || 0);
-      nextForm.driver_commission_amount = moneyInputValue(roundMoney((loadPrice * commissionPercent) / 100));
+      // Commission is calculated on the backend when stint transport reaches ₹1,20,000.
+      nextForm.driver_commission_amount = "0";
     }
-    if (field === "driver_daily_rate" || field === "loading_date" || field === "unloading_date") {
+    if (
+      field === "driver_daily_rate" ||
+      ((field === "loading_date" || field === "unloading_date") && nextForm.driver_daily_rate)
+    ) {
       const dailyRate = roundMoney(field === "driver_daily_rate" ? value : nextForm.driver_daily_rate || 0);
       const days = tripCalendarDays(
         field === "loading_date" ? value : nextForm.loading_date,
@@ -298,6 +301,7 @@ export default function CreateTripPage({ form, setForm, lorries, drivers, onSubm
             value={form.driver_commission_percent || "6"}
             onChange={(e) => updateField("driver_commission_percent", e.target.value)}
           />
+          <p className="muted" style={{ margin: "4px 0 0", fontSize: 12 }}>{commissionRuleText(language)}</p>
         </div>
 
         <div className="field-stack">

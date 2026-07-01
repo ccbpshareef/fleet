@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { api } from "../api";
+import { commissionProgressText, commissionRuleText } from "../utils/commission";
 
 export default function DriverManagementPage({
   drivers,
@@ -19,7 +20,8 @@ export default function DriverManagementPage({
   language = "en",
   lastCreated = null,
   onDismissCreated,
-  saveError = ""
+  saveError = "",
+  currentLoginIdentifier = ""
 }) {
   const t = (en, te) => (language === "te" ? te : en);
   const [leaveForms, setLeaveForms] = useState({});
@@ -33,6 +35,12 @@ export default function DriverManagementPage({
 
   useEffect(() => {
     const raw = (form.login_identifier || "").trim().toLowerCase();
+    const currentLogin = (currentLoginIdentifier || "").trim().toLowerCase();
+    if (raw && currentLogin && raw === currentLogin) {
+      setForm({ ...form, login_identifier: "" });
+      setLoginIdCheck({ checking: false, available: null, suggestions: [], message: "" });
+      return;
+    }
     if (raw.length < 3) {
       setLoginIdCheck({ checking: false, available: null, suggestions: [], message: "" });
       return;
@@ -52,7 +60,7 @@ export default function DriverManagementPage({
       }
     }, 450);
     return () => clearTimeout(timer);
-  }, [form.login_identifier]);
+  }, [form, form.login_identifier, currentLoginIdentifier, setForm]);
 
   const updateLeaveForm = (assignmentId, field, value) => {
     setLeaveForms((current) => ({
@@ -136,25 +144,39 @@ export default function DriverManagementPage({
         <div className="form-grid single compact-form-grid compact-form-grid-single">
           <input
             placeholder={t("Driver Name", "\u0c21\u0c4d\u0c30\u0c48\u0c35\u0c30\u0c4d \u0c2a\u0c47\u0c30\u0c41")}
+            name="new_driver_name"
+            autoComplete="off"
             value={form.name}
             onChange={(e) => setForm({ ...form, name: e.target.value })}
           />
           <input
             placeholder={t("Phone", "\u0c2b\u0c4b\u0c28\u0c4d")}
+            name="new_driver_phone"
+            autoComplete="off"
             value={form.phone}
             onChange={(e) => setForm({ ...form, phone: e.target.value })}
           />
           <input
             placeholder={t("License Number", "\u0c32\u0c48\u0c38\u0c46\u0c28\u0c4d\u0c38\u0c4d \u0c28\u0c02\u0c2c\u0c30\u0c4d")}
+            name="new_driver_license"
+            autoComplete="off"
             value={form.license_number}
             onChange={(e) => setForm({ ...form, license_number: e.target.value })}
           />
           <input
             placeholder={t("Login ID (optional)", "లాగిన్ ID (ఐచ్ఛికం)")}
+            name="new_driver_login_identifier"
+            autoComplete="new-password"
+            inputMode="text"
             value={form.login_identifier || ""}
             onChange={(e) =>
               setForm({ ...form, login_identifier: e.target.value.replace(/\s/g, "_").toLowerCase() })
             }
+            onFocus={() => {
+              if ((form.login_identifier || "").trim().toLowerCase() === (currentLoginIdentifier || "").trim().toLowerCase()) {
+                setForm({ ...form, login_identifier: "" });
+              }
+            }}
             autoCapitalize="none"
           />
           {loginIdCheck.checking ? (
@@ -190,6 +212,8 @@ export default function DriverManagementPage({
           <input
             type="password"
             placeholder={t("Password (optional)", "పాస్‌వర్డ్ (ఐచ్ఛికం)")}
+            name="new_driver_password"
+            autoComplete="new-password"
             value={form.password || ""}
             onChange={(e) => setForm({ ...form, password: e.target.value })}
           />
@@ -217,6 +241,7 @@ export default function DriverManagementPage({
           <input type="datetime-local" value={assignmentForm.assigned_at} onChange={(e) => setAssignmentForm({ ...assignmentForm, assigned_at: e.target.value })} />
           <input type="number" min="0" placeholder={t("Daily Wage", "\u0c21\u0c48\u0c32\u0c40 \u0c35\u0c47\u0c24\u0c28\u0c02")} value={assignmentForm.daily_wage} onChange={(e) => setAssignmentForm({ ...assignmentForm, daily_wage: e.target.value })} />
           <input type="number" min="0" placeholder={t("Commission %", "\u0c15\u0c2e\u0c3f\u0c37\u0c28\u0c4d %")} value={assignmentForm.commission_percent} onChange={(e) => setAssignmentForm({ ...assignmentForm, commission_percent: e.target.value })} />
+          <p className="muted" style={{ gridColumn: "1 / -1", margin: 0, fontSize: 12 }}>{commissionRuleText(language)}</p>
           <input placeholder={t("Notes", "\u0c17\u0c2e\u0c28\u0c3f\u0c15\u0c32\u0c41")} value={assignmentForm.notes} onChange={(e) => setAssignmentForm({ ...assignmentForm, notes: e.target.value })} />
           <button className="compact-submit" type="button" onClick={onAssign}>{t("Assign", "\u0c15\u0c47\u0c1f\u0c3e\u0c2f\u0c3f\u0c02\u0c1a\u0c41")}</button>
         </div>
@@ -300,6 +325,9 @@ export default function DriverManagementPage({
               <p>{t("Daily Wage", "\u0c21\u0c48\u0c32\u0c40 \u0c35\u0c47\u0c24\u0c28\u0c02")}: Rs.{Number(assignment.daily_wage || 0).toFixed(2)} <span className="assignment-rate-locked">{t("locked", "\u0c32\u0c3e\u0c15\u0c4d")}</span></p>
               <p>{t("Wage Amount", "\u0c35\u0c47\u0c24\u0c28 \u0c2e\u0c4a\u0c24\u0c4d\u0c24\u0c02")}: Rs.{Number(assignment.wage_amount || 0).toFixed(2)} ({assignment.working_days} {t("days", "\u0c30\u0c4b\u0c1c\u0c41\u0c32\u0c41")} × Rs.{Number(assignment.daily_wage || 0).toFixed(0)})</p>
               <p>{t("Commission", "\u0c15\u0c2e\u0c3f\u0c37\u0c28\u0c4d")}: {Number(assignment.commission_percent || 0).toFixed(2)}% / Rs.{Number(assignment.commission_amount || 0).toFixed(2)}</p>
+              {!assignment.commission_eligible ? (
+                <p className="muted">{commissionProgressText(assignment.total_transport_amount, language)}</p>
+              ) : null}
               <p><strong>{t("Total Earning", "\u0c2e\u0c4a\u0c24\u0c4d\u0c24\u0c02 \u0c38\u0c02\u0c2a\u0c3e\u0c26\u0c28")}: Rs.{Number(assignment.total_earning || 0).toFixed(2)}</strong></p>
               {assignment.notes ? <p>{t("Notes", "\u0c17\u0c2e\u0c28\u0c3f\u0c15\u0c32\u0c41")}: {assignment.notes}</p> : null}
 

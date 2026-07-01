@@ -65,24 +65,29 @@ export const ui = StyleSheet.create({
   },
   card: {
     backgroundColor: colors.surface,
-    borderRadius: radius.md,
+    borderRadius: radius.lg,
     borderWidth: 1,
     borderColor: colors.border,
     padding: space.md,
     gap: space.sm,
     shadowColor: colors.shadow,
-    shadowOpacity: 0.06,
-    shadowRadius: 4,
-    shadowOffset: { width: 0, height: 1 },
-    elevation: 1
+    shadowOpacity: 0.08,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 3
   },
   row: {
     borderWidth: 1,
     borderColor: colors.border,
-    borderRadius: radius.md,
-    backgroundColor: colors.surfaceSoft,
+    borderRadius: radius.lg,
+    backgroundColor: colors.surface,
     padding: space.md,
-    gap: space.sm
+    gap: space.sm,
+    shadowColor: colors.shadow,
+    shadowOpacity: 0.08,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 2
   },
   rowActive: {
     borderColor: colors.primary,
@@ -122,6 +127,34 @@ export const ui = StyleSheet.create({
     paddingVertical: 4,
     borderRadius: radius.pill,
     overflow: "hidden"
+  },
+  heroCard: {
+    borderRadius: radius.xl,
+    padding: space.lg,
+    backgroundColor: colors.primaryDark,
+    gap: space.sm,
+    shadowColor: colors.primary,
+    shadowOpacity: 0.28,
+    shadowRadius: 16,
+    shadowOffset: { width: 0, height: 8 },
+    elevation: 4
+  },
+  heroTitle: {
+    fontSize: typography.xl,
+    fontWeight: "800",
+    color: "#fff",
+    letterSpacing: -0.5
+  },
+  heroMeta: {
+    fontSize: typography.sm,
+    color: "rgba(255,255,255,0.9)",
+    fontWeight: "600"
+  },
+  sectionSub: {
+    fontSize: typography.sm,
+    color: colors.muted,
+    lineHeight: 20,
+    marginTop: 2
   },
   empty: {
     paddingVertical: space.xl,
@@ -222,3 +255,14 @@ export const ui = StyleSheet.create({
     lineHeight: 20
   }
 });
+
+export function tripStatusTone(status) {
+  const map = {
+    Loading: { backgroundColor: "#FEF3C7", color: "#B45309" },
+    "On route": { backgroundColor: "#DBEAFE", color: "#1D4ED8" },
+    Unloading: { backgroundColor: "#FFEDD5", color: "#C2410C" },
+    Delivered: { backgroundColor: "#DCFCE7", color: "#15803D" },
+    "Trip Done": { backgroundColor: "#DCFCE7", color: "#15803D" }
+  };
+  return map[status] || { backgroundColor: colors.surfaceMuted, color: colors.textSoft };
+}

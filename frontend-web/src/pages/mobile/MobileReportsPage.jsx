@@ -9,7 +9,8 @@ export default function MobileReportsPage({
   periodFilter = "complete",
   userRole = "user",
   expenseTotalsByTrip = {},
-  notifications = []
+  notifications = [],
+  onClearAllNotifications = async () => {}
 }) {
   const t = (en, te) => (language === "te" ? te : en);
   const periodLabel = getPeriodLabel(periodFilter, language);
@@ -45,7 +46,14 @@ export default function MobileReportsPage({
   return (
     <div className="mu-page">
       <div className="mu-screen-head">
-        <h2 className="mu-screen-title">{isDriver ? t("My Earnings", "నా సంపాదన") : t("Reports", "రిపోర్ట్స్")}</h2>
+        <div>
+          <h2 className="mu-screen-title">{isDriver ? t("My Earnings", "నా సంపాదన") : t("Reports", "రిపోర్ట్స్")}</h2>
+          <p className="mu-section-sub">
+            {isDriver
+              ? t("Your trip earnings for the selected period.", "ఎంచుకున్న కాలంలో మీ ట్రిప్ సంపాదన.")
+              : t("Business summary and driver activity.", "వ్యాపార సారాంశం మరియు డ్రైవర్ కార్యకలాపం.")}
+          </p>
+        </div>
         <span className="mu-screen-badge">
           {trips.length} · {periodLabel}
         </span>
@@ -95,7 +103,12 @@ export default function MobileReportsPage({
 
       {!isDriver && notifications.length ? (
         <div className="mu-card">
-          <h3 className="mu-screen-title">{t("Driver Activity", "డ్రైవర్ కార్యకలాపం")}</h3>
+          <div className="mu-screen-head">
+            <h3 className="mu-screen-title">{t("Driver Activity", "డ్రైవర్ కార్యకలాపం")}</h3>
+            <button type="button" className="mu-link-btn notification-clear-inline" onClick={onClearAllNotifications}>
+              {t("Clear all", "అన్నీ తొలగించు")}
+            </button>
+          </div>
           {notifications.slice(0, 8).map((item) => (
             <div className="mu-row" key={item.id} style={{ cursor: "default" }}>
               <div className="mu-row-top">

@@ -4,6 +4,7 @@ import DriverFilterBar from "./components/DriverFilterBar";
 import NotificationBell from "./components/NotificationBell";
 import MobileWorkspace from "./components/MobileWorkspace";
 import PeriodFilterBar from "./components/PeriodFilterBar";
+import { useToast } from "./components/ToastProvider";
 import useIsMobile from "./hooks/useIsMobile";
 import AddLorryPage from "./pages/AddLorryPage";
 import CreateTripPage from "./pages/CreateTripPage";
@@ -29,6 +30,7 @@ import {
 } from "./utils/periodFilter";
 import { computeAssignmentPaySummary, computeDriverEarningsSummary } from "./utils/driverEarnings";
 import { roundMoney } from "./utils/money";
+import { commissionProgressText, commissionRuleText } from "./utils/commission";
 
 const adminNavItems = [
   "Dashboard",
@@ -80,6 +82,25 @@ const mobileTabIcons = {
   Trips: "steering",
   Add: "add-box",
   Reports: "reports"
+};
+
+const pageToMobileTab = {
+  Dashboard: "Dashboard",
+  "Done Trips": "Done",
+  "Trip Contacts": "Contacts",
+  "Create Trip": "Add",
+  "Add Lorry": "Add",
+  Drivers: "Trips",
+  Reports: "Reports"
+};
+
+const mobileTabToPage = {
+  Dashboard: "Dashboard",
+  Done: "Done Trips",
+  Contacts: "Trip Contacts",
+  Trips: "Drivers",
+  Add: "Create Trip",
+  Reports: "Reports"
 };
 
 const mobileTabHints = {
@@ -176,6 +197,7 @@ const initialTrip = {
 };
 
 export default function App() {
+  const showToast = useToast();
   const workspaceScrollRef = useRef(null);
   const profileMenuRef = useRef(null);
   const [activePage, setActivePage] = useState("Dashboard");
@@ -245,7 +267,6 @@ export default function App() {
   const [activeMobileTab, setActiveMobileTab] = useState("Dashboard");
   const [periodFilter, setPeriodFilter] = useState("complete");
   const [driverFilterId, setDriverFilterId] = useState("");
-  const [isMobileNavOpen, setIsMobileNavOpen] = useState(true);
   const isMobile = useIsMobile();
 
   const authQuery = useMemo(() => {
@@ -333,6 +354,10 @@ export default function App() {
     if (!driverFilterId) return drivers;
     return drivers.filter((driver) => String(driver.id) === String(driverFilterId));
   }, [drivers, driverFilterId]);
+  const selectedDriverStintPay = useMemo(() => {
+    if (!selectedDriver) return null;
+    return computeAssignmentPaySummary(driverAssignments, { driverId: selectedDriver.id });
+  }, [selectedDriver, driverAssignments]);
 
   useEffect(() => {
     if (!authUser || authUser.role !== "admin") {
@@ -397,7 +422,7 @@ export default function App() {
     if (!newDriver.name?.trim() || !newDriver.phone?.trim()) {
       const msg = language === "te" ? "పేరు మరియు ఫోన్ అవసరం." : "Driver name and phone are required.";
       setDriverSaveError(msg);
-      alert(msg);
+      showToast(msg, "error");
       return;
     }
     const loginId = (newDriver.login_identifier || "").trim().toLowerCase();
@@ -407,7 +432,7 @@ export default function App() {
         if (!check.available) {
           const msg = check.message || (language === "te" ? "లాగిన్ ID ఇప్పటికే ఉంది" : "Login ID already exists");
           setDriverSaveError(msg);
-          alert(msg);
+          showToast(msg, "error");
           return;
         }
       } catch {
@@ -429,7 +454,7 @@ export default function App() {
         language === "te" ? "డ్రైవర్ సేవ్ విఫలమైంది." : "Failed to save driver."
       );
       setDriverSaveError(msg);
-      alert(msg);
+      showToast(msg, "error");
     }
   }
 
@@ -446,8 +471,8 @@ export default function App() {
     if (authUser?.role !== "user") return;
     const confirmMsg =
       language === "te"
-        ? `${driver.name} ను తొలగించాలా? ఈ డ్రైవర్ ట్రిప్ చరిత్ర, అసైన్‌మెంట్లు మరియు లాగిన్ కూడా తొలగించబడతాయి.`
-        : `Delete ${driver.name}? Their trip history, assignments, and login will also be removed.`;
+        ? `${driver.name} ను తొలగించాలా? లైవ్ ట్రిప్‌లతో సహా ఈ డ్రైవర్ ట్రిప్ చరిత్ర, అసైన్‌మెంట్లు మరియు లాగిన్ కూడా తొలగించబడతాయి.`
+        : `Delete ${driver.name}? Their live trips, trip history, assignments, and login will also be removed.`;
     if (!window.confirm(confirmMsg)) return;
     try {
       await api.deleteDriver(driver.id, authQuery);
@@ -460,36 +485,66 @@ export default function App() {
         error,
         language === "te" ? "డ్రైవర్ తొలగింపు విఫలమైంది." : "Failed to delete driver."
       );
-      alert(msg);
+      showToast(msg, "error");
     }
   }
 
   async function saveLorry(e) {
     e.preventDefault();
     if (authUser?.role !== "user") return;
-    await api.createLorry(
-      {
-        vehicle_number: newLorry.vehicle_number,
-        current_location: "",
-        driver_id: null
-      },
-      authQuery
-    );
-    const latestLorry = await api.getLorries(authQuery).then((items) =>
-      items.find((item) => item.vehicle_number === newLorry.vehicle_number)
-    );
-    if (latestLorry && newLorry.driver_id) {
-      await api.createDriverAssignment(
+    try {
+      await api.createLorry(
         {
-          driver_id: Number(newLorry.driver_id),
-          lorry_id: latestLorry.id,
-          assigned_at: newLorry.assigned_at || null
+          vehicle_number: newLorry.vehicle_number,
+          current_location: "",
+          driver_id: null
         },
         authQuery
       );
+      const latestLorry = await api.getLorries(authQuery).then((items) =>
+        items.find((item) => item.vehicle_number === newLorry.vehicle_number)
+      );
+      if (latestLorry && newLorry.driver_id) {
+        await api.createDriverAssignment(
+          {
+            driver_id: Number(newLorry.driver_id),
+            lorry_id: latestLorry.id,
+            assigned_at: newLorry.assigned_at || null
+          },
+          authQuery
+        );
+      }
+      setNewLorry({ vehicle_number: "", lorry_type: "Open Body", driver_id: "", assigned_at: "" });
+      await loadData();
+    } catch (error) {
+      const msg = parseApiDetail(
+        error,
+        language === "te" ? "లారీ సేవ్ విఫలమైంది." : "Failed to save lorry."
+      );
+      showToast(msg, "error");
     }
-    setNewLorry({ vehicle_number: "", lorry_type: "Open Body", driver_id: "", assigned_at: "" });
-    await loadData();
+  }
+
+  async function deleteLorry(lorry) {
+    if (authUser?.role !== "user") return;
+    const confirmMsg =
+      language === "te"
+        ? `${lorry.vehicle_number} లారీని తొలగించాలా? దీనికి సంబంధించిన ట్రిప్ చరిత్ర కూడా తొలగించబడుతుంది.`
+        : `Delete lorry ${lorry.vehicle_number}? Related trip history will also be removed.`;
+    if (!window.confirm(confirmMsg)) return;
+    try {
+      await api.deleteLorry(lorry.id, authQuery);
+      if (selectedLorryHistory?.lorry_id === lorry.id) {
+        setSelectedLorryHistory(null);
+      }
+      await loadData();
+    } catch (error) {
+      const msg = parseApiDetail(
+        error,
+        language === "te" ? "లారీ తొలగింపు విఫలమైంది." : "Failed to delete lorry."
+      );
+      showToast(msg, "error");
+    }
   }
 
   async function toggleLorryStatus(lorry) {
@@ -524,37 +579,51 @@ export default function App() {
     if (authUser?.role !== "user" && authUser?.role !== "driver") return;
     const driverId =
       authUser?.role === "driver" ? Number(authUser.driver_id) : Number(newTrip.driver_id);
-    const createdTrip = await api.createTrip(
-      {
-        ...newTrip,
-        lorry_id: Number(newTrip.lorry_id),
-        driver_id: driverId,
-        loading_date: newTrip.loading_date || null,
-        unloading_date: newTrip.unloading_date || null,
-        load_price: Number(newTrip.load_price)
-      },
-      authQuery
-    );
-    await api.createExpense(
-      {
-        trip_id: Number(createdTrip.id),
-        diesel: roundMoney(newTrip.diesel),
-        toll: roundMoney(newTrip.toll),
-        driver_bata: roundMoney(newTrip.driver_bata),
-        driver_daily_wage: roundMoney(newTrip.driver_daily_wage),
-        driver_commission_percent: roundMoney(newTrip.driver_commission_percent),
-        driver_commission_amount: roundMoney(newTrip.driver_commission_amount),
-        maintenance: roundMoney(roundMoney(newTrip.puncture) + roundMoney(newTrip.repair)),
-        other: roundMoney(newTrip.other_expense),
-        proof_images: newTrip.proof_images || []
-      },
-      authQuery
-    );
-    setNewTrip({
-      ...initialTrip,
-      driver_id: authUser?.role === "driver" ? String(authUser.driver_id || "") : ""
-    });
-    await loadData();
+    try {
+      const createdTrip = await api.createTrip(
+        {
+          ...newTrip,
+          lorry_id: Number(newTrip.lorry_id),
+          driver_id: driverId,
+          loading_date: newTrip.loading_date || null,
+          unloading_date: newTrip.unloading_date || null,
+          load_price: Number(newTrip.load_price)
+        },
+        authQuery
+      );
+      await api.createExpense(
+        {
+          trip_id: Number(createdTrip.id),
+          diesel: roundMoney(newTrip.diesel),
+          toll: roundMoney(newTrip.toll),
+          driver_bata: roundMoney(newTrip.driver_bata),
+          driver_daily_wage: roundMoney(newTrip.driver_daily_wage),
+          driver_commission_percent: roundMoney(newTrip.driver_commission_percent),
+          driver_commission_amount: roundMoney(newTrip.driver_commission_amount),
+          maintenance: roundMoney(roundMoney(newTrip.puncture) + roundMoney(newTrip.repair)),
+          other: roundMoney(newTrip.other_expense),
+          proof_images: newTrip.proof_images || []
+        },
+        authQuery
+      );
+      setNewTrip({
+        ...initialTrip,
+        driver_id: authUser?.role === "driver" ? String(authUser.driver_id || "") : ""
+      });
+      await loadData();
+      showToast(
+        language === "te" ? "ట్రిప్ విజయవంతంగా సేవ్ అయింది." : "Trip saved successfully.",
+        "success"
+      );
+    } catch (error) {
+      showToast(
+        parseApiDetail(
+          error,
+          language === "te" ? "ట్రిప్ సేవ్ విఫలమైంది." : "Failed to save trip."
+        ),
+        "error"
+      );
+    }
   }
 
   async function updateTrip(tripId, payload) {
@@ -577,7 +646,7 @@ export default function App() {
       setProfile(existingProfile);
       setActivePage("Dashboard");
     } catch (error) {
-      alert(error.message || "Could not login as user");
+      showToast(error.message || "Could not login as user", "error");
     }
   }
 
@@ -644,6 +713,34 @@ export default function App() {
   async function markAllNotificationsRead() {
     await api.markAllNotificationsRead(authQuery);
     await loadData();
+  }
+
+  async function clearAllNotifications() {
+    if (!notifications.length) return;
+    const confirmMsg =
+      language === "te"
+        ? "అన్ని నోటిఫికేషన్లను తొలగించాలా?"
+        : "Clear all notifications?";
+    if (!window.confirm(confirmMsg)) return;
+    try {
+      await api.clearAllNotifications(authQuery);
+      setShowNotifications(false);
+      await loadData();
+      showToast(
+        language === "te" ? "నోటిఫికేషన్లు తొలగించబడ్డాయి." : "Notifications cleared.",
+        "success"
+      );
+    } catch (error) {
+      showToast(
+        parseApiDetail(
+          error,
+          language === "te"
+            ? "నోటిఫికేషన్లు తొలగించలేకపోయాం. బ్యాకెండ్ రీస్టార్ట్ చేయండి."
+            : "Could not clear notifications. Restart the backend server."
+        ),
+        "error"
+      );
+    }
   }
 
   async function updateAssignment(assignmentId, payload) {
@@ -753,10 +850,10 @@ export default function App() {
   async function handleForgotPassword(identifier, newPassword, onDone) {
     try {
       await api.forgotPassword({ identifier, new_password: newPassword });
-      alert(language === "te" ? "పాస్‌వర్డ్ విజయవంతంగా రీసెట్ అయింది." : "Password reset successful.");
+      showToast(language === "te" ? "పాస్‌వర్డ్ విజయవంతంగా రీసెట్ అయింది." : "Password reset successful.", "success");
       onDone?.();
     } catch (error) {
-      alert(error.message || "Password reset failed");
+      showToast(error.message || "Password reset failed", "error");
     }
   }
 
@@ -887,6 +984,7 @@ export default function App() {
           language={language}
           lastCreated={lastDriverCreated}
           onDismissCreated={() => setLastDriverCreated(null)}
+          currentLoginIdentifier={authUser?.identifier}
         />
         </div>
       );
@@ -902,6 +1000,7 @@ export default function App() {
           userRole={authUser?.role}
           expenseTotalsByTrip={expenseTotalsByTrip}
           notifications={notifications}
+          onClearAllNotifications={clearAllNotifications}
         />
       );
     }
@@ -959,6 +1058,7 @@ export default function App() {
             selectedLorryHistory={selectedLorryHistory}
             onSelectLorry={openLorryHistory}
             onToggleLorryStatus={toggleLorryStatus}
+            onDeleteLorry={deleteLorry}
             onUpdateAssignment={updateAssignment}
             onSubmit={saveLorry}
             language={language}
@@ -1032,6 +1132,7 @@ export default function App() {
           selectedLorryHistory={selectedLorryHistory}
           onSelectLorry={openLorryHistory}
           onToggleLorryStatus={toggleLorryStatus}
+          onDeleteLorry={deleteLorry}
           onUpdateAssignment={updateAssignment}
           onSubmit={saveLorry}
           language={language}
@@ -1064,6 +1165,7 @@ export default function App() {
             language={language}
             lastCreated={lastDriverCreated}
             onDismissCreated={() => setLastDriverCreated(null)}
+            currentLoginIdentifier={authUser?.identifier}
           />
         </>
       );
@@ -1120,8 +1222,8 @@ export default function App() {
         trips={filteredTrips}
         drivers={driversForFilter.length ? driversForFilter : drivers}
         lorries={lorries}
-        onAddTrip={() => setActivePage("Create Trip")}
-        onAddExpense={() => setActivePage("Create Trip")}
+        onAddTrip={() => goToPage("Create Trip")}
+        onAddExpense={() => goToPage("Create Trip")}
         language={language}
         expenseTotalsByTrip={expenseTotalsByTrip}
         onUpdateTrip={updateTrip}
@@ -1160,24 +1262,11 @@ export default function App() {
         ? ["Dashboard", "Create Trip", "Done Trips"]
         : ["Create Trip", "Add Lorry", "Trip Contacts"];
   const desktopActiveTripCount = trips.filter((trip) => trip.status !== "Delivered" && trip.status !== "Trip Done").length;
-  const mobileActiveTripCount = filteredTrips.filter((trip) => trip.status !== "Delivered" && trip.status !== "Trip Done").length;
   const mobileHeaderDate = new Date().toLocaleDateString(language === "te" ? "te-IN" : "en-IN", {
     weekday: "short",
     day: "numeric",
     month: "short"
   });
-  const mobileHeaderStats =
-    authUser?.role === "driver"
-      ? [
-          { label: tMobileTab("Trips"), value: driverEarningsSummary.tripCount },
-          { label: language === "te" ? "సంపాదన" : "Earnings", value: `Rs ${driverEarningsSummary.totalEarning.toFixed(0)}` },
-          { label: tMobileTab("Trips Live"), value: driverEarningsSummary.activeTripCount }
-        ]
-      : [
-          { label: tMobileTab("Fleet"), value: filteredDashboard?.total_lorries ?? lorries.length },
-          { label: tMobileTab("Trips Live"), value: mobileActiveTripCount },
-          { label: tMobileTab("Drivers"), value: driversForFilter.length || drivers.length }
-        ];
   const workspaceMetrics =
     authUser?.role === "driver"
       ? [
@@ -1245,8 +1334,20 @@ export default function App() {
 
   function goToPage(page) {
     setActivePage(page);
+    const mobileTab = pageToMobileTab[page];
+    if (mobileTab) {
+      setActiveMobileTab(mobileTab);
+    }
     if (typeof window !== "undefined" && window.innerWidth <= 860) {
       setIsSidebarOpen(false);
+    }
+  }
+
+  function goToMobileTab(tab) {
+    setActiveMobileTab(tab);
+    const page = mobileTabToPage[tab];
+    if (page) {
+      setActivePage(page);
     }
   }
 
@@ -1259,6 +1360,14 @@ export default function App() {
       return next;
     });
   }
+
+  useEffect(() => {
+    if (!isMobile) return;
+    const mobileTab = pageToMobileTab[activePage];
+    if (mobileTab && mobileTab !== activeMobileTab) {
+      setActiveMobileTab(mobileTab);
+    }
+  }, [isMobile, activePage]);
 
   useEffect(() => {
     if (authUser?.role === "admin" && userActionPages.has(activePage)) {
@@ -1427,11 +1536,6 @@ export default function App() {
     <span className="profile-incomplete-dot" aria-hidden="true" title={language === "te" ? "ప్రొఫైల్ పూర్తి చేయండి" : "Complete your profile"} />
   ) : null;
 
-  const selectedDriverStintPay = useMemo(() => {
-    if (!selectedDriver) return null;
-    return computeAssignmentPaySummary(driverAssignments, { driverId: selectedDriver.id });
-  }, [selectedDriver, driverAssignments]);
-
   const driverDetailModal = selectedDriver ? (
     <div
       className="driver-detail-modal-overlay"
@@ -1479,6 +1583,12 @@ export default function App() {
                 ? "గ్యాప్ రోజులు చెల్లింపులో లేవు. పాత కాలాలు క్రింద చరిత్రలో."
                 : "Gap days are not paid. Past stints stay in history only."}
             </p>
+            <p className="muted">{commissionRuleText(language)}</p>
+            {selectedDriverStintPay.currentStint?.total_transport_amount != null ? (
+              <p className="muted">
+                {commissionProgressText(selectedDriverStintPay.currentStint.total_transport_amount, language)}
+              </p>
+            ) : null}
           </div>
         ) : null}
         {selectedDriverHistory ? (
@@ -1487,6 +1597,7 @@ export default function App() {
             <p>{language === "te" ? "మొత్తం పని రోజులు" : "Total Working Days"}: {selectedDriverHistory.total_working_days || 0}</p>
             <p>{language === "te" ? "మొత్తం ట్రాన్స్‌పోర్ట్ మొత్తం" : "Total Transport Amount"}: {formatMoney(language, selectedDriverHistory.total_transport_amount)}</p>
             <p>{language === "te" ? "మొత్తం కమిషన్" : "Total Commission"}: {formatMoney(language, selectedDriverHistory.total_commission_amount)}</p>
+            <p className="muted">{commissionRuleText(language)}</p>
             <p>{language === "te" ? "మొత్తం సంపాదన" : "Total Earning"}: {formatMoney(language, selectedDriverHistory.total_driver_earning)}</p>
             <h4 style={{ margin: "12px 0 8px" }}>
               {language === "te" ? "ఇటీవలి ట్రిప్ లెడ్జర్" : "Recent Trip Ledger"}
@@ -1499,6 +1610,11 @@ export default function App() {
                   <p>{language === "te" ? "పని రోజులు" : "Working Days"}: {trip.working_days || 0}</p>
                   <p>{language === "te" ? "ట్రాన్స్‌పోర్ట్ మొత్తం" : "Transport Amount"}: {formatMoney(language, trip.transport_amount ?? trip.load_price)}</p>
                   <p>{language === "te" ? "కమిషన్" : "Commission"}: {formatMoney(language, trip.commission_amount)}</p>
+                  {!trip.commission_eligible ? (
+                    <p className="muted" style={{ fontSize: 12 }}>
+                      {commissionProgressText(selectedDriverHistory.total_transport_amount, language)}
+                    </p>
+                  ) : null}
                   <p>{language === "te" ? "ట్రిప్ మొత్తం సంపాదన" : "Trip Total Earning"}: {formatMoney(language, trip.trip_total_earning ?? trip.driver_earned)}</p>
                 </div>
               ))}
@@ -1637,18 +1753,14 @@ export default function App() {
             language={language}
             authUser={authUser}
             activeTab={activeMobileTab}
-            setActiveTab={setActiveMobileTab}
+            setActiveTab={goToMobileTab}
             tabs={mobileTabs}
             tabLabel={tMobileTab}
-            tabHints={mobileTabHints}
             headerDate={mobileHeaderDate}
-            headerStats={mobileHeaderStats}
             profileImageUrl={profileImageUrl}
             profileInitial={profileInitial}
             onProfileOpen={openProfilePanel}
             profileNeedsSetup={needsProfileSetup}
-            isNavOpen={isMobileNavOpen}
-            setIsNavOpen={setIsMobileNavOpen}
             scopeUsers={scopeUsers}
             selectedScopeUser={selectedScopeUser}
             setSelectedScopeUser={setSelectedScopeUser}
@@ -1657,6 +1769,18 @@ export default function App() {
             filters={renderPeriodDriverFilters()}
             NavIcon={NavIcon}
             mobileTabIcons={mobileTabIcons}
+            showNotifications={showUserNotifications}
+            notifications={notifications}
+            unreadNotificationCount={unreadNotificationCount}
+            notificationsOpen={showNotifications}
+            onToggleNotifications={() => {
+              setShowNotifications((prev) => !prev);
+              if (showProfilePanel) setShowProfilePanel(false);
+            }}
+            onCloseNotifications={() => setShowNotifications(false)}
+            onMarkNotificationRead={markNotificationRead}
+            onMarkAllNotificationsRead={markAllNotificationsRead}
+            onClearAllNotifications={clearAllNotifications}
           >
             {renderMobilePage()}
           </MobileWorkspace>
@@ -1758,13 +1882,15 @@ export default function App() {
               </span>
             </div>
             <p className="workspace-subtitle">{pageDescription}</p>
-            <div className="page-help-banner" role="note">
-              <span className="page-help-icon" aria-hidden="true">💡</span>
-              <div>
-                <strong>{language === "te" ? "ఈ పేజీ లో" : "On this page"}</strong>
-                {pageDescription}
+            {isMobile ? (
+              <div className="page-help-banner" role="note">
+                <span className="page-help-icon" aria-hidden="true">💡</span>
+                <div>
+                  <strong>{language === "te" ? "ఈ పేజీ లో" : "On this page"}</strong>
+                  {pageDescription}
+                </div>
               </div>
-            </div>
+            ) : null}
           </div>
 
 
@@ -1818,6 +1944,7 @@ export default function App() {
                   onClose={() => setShowNotifications(false)}
                   onMarkRead={markNotificationRead}
                   onMarkAllRead={markAllNotificationsRead}
+                  onClearAll={clearAllNotifications}
                   language={language}
                 />
               ) : null}

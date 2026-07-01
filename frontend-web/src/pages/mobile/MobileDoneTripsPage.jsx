@@ -1,7 +1,8 @@
 import { useMemo, useState } from "react";
-import { tripStatusLabel } from "../../utils/fleetLabels";
 import { getPeriodLabel } from "../../utils/periodFilter";
 import MobileTripDetailPanel from "../../components/mobile/MobileTripDetailPanel";
+import MobileTripListRow from "../../components/mobile/MobileTripListRow";
+import MobileTripSheet from "../../components/mobile/MobileTripSheet";
 
 export default function MobileDoneTripsPage({
   trips,
@@ -32,7 +33,10 @@ export default function MobileDoneTripsPage({
   return (
     <div className="mu-page">
       <div className="mu-screen-head">
-        <h2 className="mu-screen-title">{t("Done Trips", "పూర్తైన ట్రిప్స్")}</h2>
+        <div>
+          <h2 className="mu-screen-title">{t("Done Trips", "పూర్తైన ట్రిప్స్")}</h2>
+          <p className="mu-section-sub">{t("Completed deliveries and trip history.", "పూర్తైన డెలివరీలు మరియు ట్రిప్ చరిత్ర.")}</p>
+        </div>
         <span className="mu-screen-badge">
           {doneTrips.length} · {getPeriodLabel(periodFilter, language)}
         </span>
@@ -41,25 +45,17 @@ export default function MobileDoneTripsPage({
       <div className="mu-card">
         {doneTrips.length ? (
           doneTrips.map((trip) => (
-            <button
+            <MobileTripListRow
               key={trip.id}
-              type="button"
-              className={`mu-row ${selectedTripId === trip.id ? "active" : ""}`}
+              trip={trip}
+              language={language}
+              active={selectedTripId === trip.id}
               onClick={() => setSelectedTripId(trip.id)}
-            >
-              <div className="mu-row-top">
-                <span className="mu-row-title">
-                  #{trip.lorry_id} · {trip.load_location} → {trip.unload_location}
-                </span>
-                <span className="mu-status-pill">{tripStatusLabel(trip.status, language)}</span>
-              </div>
-              <p className="mu-row-meta">
-                {driverNameById[trip.driver_id] || "-"} · {trip.contact_person_phone || "-"}
-              </p>
-              <p className="mu-row-meta">
-                {trip.completed_at ? new Date(trip.completed_at).toLocaleDateString("en-IN") : "-"}
-              </p>
-            </button>
+              metaLines={[
+                `${driverNameById[trip.driver_id] || "-"} · ${trip.contact_person_phone || "-"}`,
+                trip.completed_at ? new Date(trip.completed_at).toLocaleDateString("en-IN") : "-"
+              ]}
+            />
           ))
         ) : (
           <div className="mu-empty">
@@ -71,17 +67,20 @@ export default function MobileDoneTripsPage({
         )}
       </div>
 
-      {selectedTrip ? (
-        <MobileTripDetailPanel
-          trip={selectedTrip}
-          expenses={selectedExpense}
-          drivers={drivers}
-          lorries={lorries}
-          language={language}
-          userRole={userRole}
-          onUpdateTrip={onUpdateTrip}
-        />
-      ) : null}
+      <MobileTripSheet open={Boolean(selectedTrip)} onClose={() => setSelectedTripId(null)} language={language}>
+        {selectedTrip ? (
+          <MobileTripDetailPanel
+            trip={selectedTrip}
+            expenses={selectedExpense}
+            drivers={drivers}
+            lorries={lorries}
+            language={language}
+            userRole={userRole}
+            onUpdateTrip={onUpdateTrip}
+            inSheet
+          />
+        ) : null}
+      </MobileTripSheet>
     </div>
   );
 }

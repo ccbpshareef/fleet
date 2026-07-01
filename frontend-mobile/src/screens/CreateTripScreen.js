@@ -5,6 +5,7 @@ import DateField from "../components/DateField";
 import { TRIP_STATUSES, tripStatusLabel } from "../utils/fleetLabels";
 import { colors } from "../theme";
 import { moneyInputValue, roundMoney } from "../utils/money";
+import { commissionRuleText } from "../utils/commission";
 
 export default function CreateTripScreen({ form, setForm, lorries, drivers, onStartTrip, language = "en", lockedDriverId = null }) {
   const t = (en, te) => (language === "te" ? te : en);
@@ -205,15 +206,14 @@ export default function CreateTripScreen({ form, setForm, lorries, drivers, onSt
           keyboardType="numeric"
           value={form.driver_commission_percent || ""}
           onChangeText={(v) => {
-            const percent = Number(v || 0);
-            const loadPrice = Number(form.load_price || 0);
             setForm({
               ...form,
               driver_commission_percent: v,
-              driver_commission_amount: percent > 0 ? moneyInputValue(roundMoney((loadPrice * percent) / 100)) : ""
+              driver_commission_amount: "0"
             });
           }}
         />
+        <Text style={styles.subTitle}>{commissionRuleText(language)}</Text>
         <TextInput style={styles.input} placeholder={t("Commission Amount", "కమిషన్ మొత్తం")} placeholderTextColor={colors.mutedSoft} keyboardType="numeric" value={form.driver_commission_amount || ""} onChangeText={(v) => setForm({ ...form, driver_commission_amount: v })} />
 
         <View style={styles.totalBox}>

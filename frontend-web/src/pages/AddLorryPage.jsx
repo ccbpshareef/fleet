@@ -10,6 +10,7 @@ export default function AddLorryPage({
   selectedLorryHistory = null,
   onSelectLorry = () => {},
   onToggleLorryStatus = () => {},
+  onDeleteLorry = () => {},
   onUpdateAssignment = () => {},
   onSubmit,
   language = "en"
@@ -256,6 +257,13 @@ export default function AddLorryPage({
                             onClick={() => onToggleLorryStatus(lorry)}
                           >
                             {lorry.is_active ? t("Disable", "\u0c21\u0c3f\u0c38\u0c47\u0c2c\u0c41\u0c32\u0c4d") : t("Enable", "\u0c0e\u0c28\u0c47\u0c2c\u0c41\u0c32\u0c4d")}
+                          </button>
+                          <button
+                            type="button"
+                            className="ghost fleet-inline-btn driver-delete-btn"
+                            onClick={() => onDeleteLorry(lorry)}
+                          >
+                            {t("Delete", "తొలగించు")}
                           </button>
                         </div>
                       </td>

@@ -1,3 +1,5 @@
+import NotificationBell from "./NotificationBell";
+
 export default function MobileWorkspace({
   language,
   authUser,
@@ -5,15 +7,11 @@ export default function MobileWorkspace({
   setActiveTab,
   tabs,
   tabLabel,
-  tabHints,
   headerDate,
-  headerStats,
   profileImageUrl,
   profileInitial,
   onProfileOpen,
   profileNeedsSetup = false,
-  isNavOpen,
-  setIsNavOpen,
   scopeUsers,
   selectedScopeUser,
   setSelectedScopeUser,
@@ -22,9 +20,17 @@ export default function MobileWorkspace({
   filters,
   children,
   NavIcon,
-  mobileTabIcons
+  mobileTabIcons,
+  showNotifications = false,
+  notifications = [],
+  unreadNotificationCount = 0,
+  notificationsOpen = false,
+  onToggleNotifications,
+  onCloseNotifications,
+  onMarkNotificationRead,
+  onMarkAllNotificationsRead,
+  onClearAllNotifications
 }) {
-  const hint = tabHints[activeTab];
   const metaLabel =
     authUser?.role === "admin"
       ? selectedScopeUser || (language === "te" ? "యూజర్ ఎంచుకోండి" : "Select user")
@@ -32,58 +38,42 @@ export default function MobileWorkspace({
 
   return (
     <div className="mobile-app-shell">
-      <header className="m-header-wrap">
+      <header className="m-header-wrap m-header-sticky">
         <div className="m-header-bar">
-          <button
-            type="button"
-            className="m-header-menu-btn"
-            onClick={() => setIsNavOpen((prev) => !prev)}
-            aria-label={
-              language === "te"
-                ? isNavOpen
-                  ? "నావిగేషన్ మూసివేయి"
-                  : "నావిగేషన్ తెరవు"
-                : isNavOpen
-                  ? "Hide navigation"
-                  : "Show navigation"
-            }
-            aria-expanded={isNavOpen}
-          >
-            <span className={`m-menu-icon ${isNavOpen ? "open" : ""}`} aria-hidden="true">
-              <span />
-              <span />
-              <span />
-            </span>
-          </button>
-
           <div className="m-header-copy">
-            <h1 className="m-header-title">{activeTab === "Dashboard" ? tabLabel("Dashboard") : tabLabel(activeTab)}</h1>
-            <p className="m-header-meta">{metaLabel}</p>
-            {hint ? (
-              <p className="m-header-hint">{language === "te" ? hint.te : hint.en}</p>
+            <p className="m-header-kicker">{metaLabel}</p>
+            <h1 className="m-header-title">{tabLabel(activeTab)}</h1>
+          </div>
+
+          <div className="m-header-actions">
+            {showNotifications ? (
+              <NotificationBell
+                notifications={notifications}
+                unreadCount={unreadNotificationCount}
+                open={notificationsOpen}
+                onToggle={onToggleNotifications}
+                onClose={onCloseNotifications}
+                onMarkRead={onMarkNotificationRead}
+                onMarkAllRead={onMarkAllNotificationsRead}
+                onClearAll={onClearAllNotifications}
+                language={language}
+              />
             ) : null}
+            <button
+              type="button"
+              className={`m-avatar-btn ${profileNeedsSetup ? "profile-incomplete" : ""}`}
+              onClick={onProfileOpen}
+              aria-label={language === "te" ? "ప్రొఫైల్" : "Profile"}
+            >
+              {profileImageUrl ? (
+                <img src={profileImageUrl} alt="" className="m-avatar-img" />
+              ) : (
+                <span className="m-avatar-fallback">{profileInitial}</span>
+              )}
+              {profileNeedsSetup ? <span className="profile-incomplete-dot" aria-hidden="true" /> : null}
+            </button>
           </div>
-
-          <button type="button" className={`m-avatar-btn ${profileNeedsSetup ? "profile-incomplete" : ""}`} onClick={onProfileOpen} aria-label={language === "te" ? "ప్రొఫైల్" : "Profile"}>
-            {profileImageUrl ? (
-              <img src={profileImageUrl} alt="" className="m-avatar-img" />
-            ) : (
-              <span className="m-avatar-fallback">{profileInitial}</span>
-            )}
-            {profileNeedsSetup ? <span className="profile-incomplete-dot" aria-hidden="true" /> : null}
-          </button>
         </div>
-
-        {activeTab === "Dashboard" ? (
-          <div className="m-quick-stats">
-            {headerStats.map((item) => (
-              <div key={item.label} className="m-quick-stat">
-                <span className="m-quick-stat-label">{item.label}</span>
-                <strong className="m-quick-stat-value">{item.value}</strong>
-              </div>
-            ))}
-          </div>
-        ) : null}
       </header>
 
       {authUser?.role === "admin" ? (
@@ -131,6 +121,7 @@ export default function MobileWorkspace({
               type="button"
               className={`m-bottom-nav-btn ${active ? "active" : ""}`}
               onClick={() => setActiveTab(tab)}
+              aria-current={active ? "page" : undefined}
             >
               <span className="m-bottom-nav-icon">
                 <NavIcon name={mobileTabIcons[tab] || "reports"} />

@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useToast } from "../ToastProvider";
 import { TRIP_STATUSES, tripStatusLabel } from "../../utils/fleetLabels";
 import { expenseFieldsForRole } from "../../utils/tripExpenseEdit";
 import { buildTripUpdatePayload, expenseDraftFromTotals, toDateInputValue } from "../../utils/tripUpdate";
@@ -16,9 +17,11 @@ export default function MobileTripDetailPanel({
   language = "en",
   userRole = "user",
   onUpdateTrip,
-  allowTripUpdate = true
+  allowTripUpdate = true,
+  inSheet = false
 }) {
   const t = (en, te) => (language === "te" ? te : en);
+  const showToast = useToast();
   const isDriver = userRole === "driver";
   const visibleExpenseFields = expenseFieldsForRole(userRole);
   const myEarning = tripDriverEarning(expenses);
@@ -72,14 +75,14 @@ export default function MobileTripDetailPanel({
       await onUpdateTrip(trip.id, updatePayload);
       setIsEditing(false);
     } catch (error) {
-      alert(error.message || t("Failed to update trip", "ట్రిప్ అప్డేట్ విఫలమైంది"));
+      showToast(error.message || t("Failed to update trip", "ట్రిప్ అప్డేట్ విఫలమైంది"), "error");
     } finally {
       setIsSaving(false);
     }
   }
 
   return (
-    <div className="mu-card mu-trip-detail">
+    <div className={inSheet ? "mu-trip-detail mu-trip-detail-sheet" : "mu-card mu-trip-detail"}>
       <div className="mu-trip-detail-head">
         <div className="mu-trip-detail-copy">
           <h3 className="mu-screen-title">{isDriver ? t("My Trip Details", "నా ట్రిప్ వివరాలు") : t("Complete Trip Details", "పూర్తి ట్రిప్ వివరాలు")}</h3>
@@ -155,6 +158,12 @@ export default function MobileTripDetailPanel({
               <span>{t("Net Profit", "నికర లాభం")}</span>
               <strong className={Number(trip.net_profit || 0) >= 0 ? "profit" : "loss"}>{formatCurrency(trip.net_profit)}</strong>
             </div>
+            <p className="mu-row-meta mu-profit-hint">
+              {t(
+                "Driver wage and commission are trip expenses, so they reduce net profit.",
+                "డ్రైవర్ వేతనం మరియు కమిషన్ ట్రిప్ ఖర్చులు — అవి నికర లాభాన్ని తగ్గిస్తాయి."
+              )}
+            </p>
           </>
         )}
       </div>
