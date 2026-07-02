@@ -1,21 +1,35 @@
 import { Platform } from "react-native";
+import { formatApiErrorBody } from "./src/utils/parseApiError";
+
+const FLEET_API_PATH = "/reports-data/fleet";
+const FLEET_API_PORT = 5000;
+
+function withFleetPrefix(path) {
+  if (!path) {
+    return FLEET_API_PATH;
+  }
+  if (path.startsWith(FLEET_API_PATH)) {
+    return path;
+  }
+  return `${FLEET_API_PATH}${path.startsWith("/") ? path : `/${path}`}`;
+}
 
 function resolveApiBase() {
   const envBase = process.env.EXPO_PUBLIC_API_BASE_URL;
   if (envBase) {
-    return envBase;
+    return envBase.replace(/\/$/, "");
   }
 
   if (Platform.OS === "web") {
     const host = typeof window !== "undefined" ? window.location.hostname : "localhost";
-    return `http://${host}:8000`;
+    return `http://${host}:${FLEET_API_PORT}`;
   }
 
   if (Platform.OS === "android") {
-    return "http://10.0.2.2:8000";
+    return `http://10.0.2.2:${FLEET_API_PORT}`;
   }
 
-  return "http://127.0.0.1:8000";
+  return `http://127.0.0.1:${FLEET_API_PORT}`;
 }
 
 const API_BASE = resolveApiBase();
@@ -30,6 +44,39 @@ function withQuery(path, query = {}) {
   });
   const queryString = params.toString();
   return queryString ? `${path}?${queryString}` : path;
+}
+
+function buildApiUrl(path, query) {
+  const requestPath = withQuery(withFleetPrefix(path), query);
+
+  if (!API_BASE) {
+    return requestPath;
+  }
+
+  if (API_BASE.endsWith(FLEET_API_PATH)) {
+    return `${API_BASE}${requestPath.slice(FLEET_API_PATH.length)}`;
+  }
+
+  return `${API_BASE}${requestPath}`;
+}
+
+function unwrapApiPayload(parsed) {
+  if (parsed === null || parsed === undefined) {
+    return parsed;
+  }
+  if (typeof parsed !== "object" || Array.isArray(parsed)) {
+    return parsed;
+  }
+  const isEnvelope =
+    (parsed.status === "success" || parsed.status === "fail") &&
+    ("data" in parsed || parsed.status === "fail");
+  if (isEnvelope) {
+    if (parsed.status === "fail") {
+      throw new Error(formatApiErrorBody(JSON.stringify(parsed)));
+    }
+    return parsed.data;
+  }
+  return parsed;
 }
 
 async function request(path, options = {}) {
@@ -47,14 +94,14 @@ async function request(path, options = {}) {
     const timer = setTimeout(() => controller.abort(), timeoutMs);
 
     try {
-      const response = await fetch(`${API_BASE}${withQuery(path, query)}`, {
+      const response = await fetch(buildApiUrl(path, query), {
         headers: { "Content-Type": "application/json" },
         signal: controller.signal,
         ...fetchOptions
       });
       if (!response.ok) {
         const text = await response.text();
-        throw new Error(text || "API error");
+        throw new Error(formatApiErrorBody(text) || "API error");
       }
       if (response.status === 204) {
         return null;
@@ -63,10 +110,12 @@ async function request(path, options = {}) {
       if (!text) {
         return null;
       }
-      return JSON.parse(text);
+      return unwrapApiPayload(JSON.parse(text));
     } catch (error) {
       if (error?.name === "AbortError") {
-        throw new Error("Request timed out. Check that the backend is running on port 8000.");
+        throw new Error(
+          "Request timed out. Check that the Fleet API is running at http://localhost:5000/reports-data/fleet"
+        );
       }
       throw error;
     } finally {
@@ -75,6 +124,11 @@ async function request(path, options = {}) {
   };
 
   const promise = run();
+  if (method !== "GET") {
+    promise.finally(() => {
+      inflightGetRequests.clear();
+    });
+  }
   if (dedupeKey) {
     inflightGetRequests.set(dedupeKey, promise);
     promise.finally(() => {
@@ -87,6 +141,7 @@ async function request(path, options = {}) {
 }
 
 export const api = {
+  health: () => request("/health"),
   login: (payload) => request("/auth/login", { method: "POST", body: JSON.stringify(payload) }),
   loginAsUser: (payload, auth) =>
     request("/auth/login-as-user", { method: "POST", body: JSON.stringify(payload), query: auth }),
@@ -99,9 +154,16 @@ export const api = {
   getDashboard: (auth) => request("/dashboard", { query: auth }),
   getLorries: (auth) => request("/lorries", { query: auth }),
   getDrivers: (auth) => request("/drivers", { query: auth }),
+  getMyDriver: (auth) => request("/drivers/me", { query: auth }),
   getDriverAssignments: (auth) => request("/driver-assignments", { query: auth }),
   createDriverAssignment: (payload, auth) =>
     request("/driver-assignments", { method: "POST", body: JSON.stringify(payload), query: auth }),
+  updateDriverAssignment: (assignmentId, payload, auth) =>
+    request(`/driver-assignments/${assignmentId}`, {
+      method: "PATCH",
+      body: JSON.stringify(payload),
+      query: auth
+    }),
   completeDriverAssignment: (assignmentId, payload, auth) =>
     request(`/driver-assignments/${assignmentId}/complete`, {
       method: "PATCH",

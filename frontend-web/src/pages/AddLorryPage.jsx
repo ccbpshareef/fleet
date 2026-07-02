@@ -1,5 +1,32 @@
 import { Fragment, useDeferredValue, useMemo, useState } from "react";
+import {
+  FleetCalendarIcon,
+  FleetInactiveIcon,
+  FleetPlateIcon,
+  FleetSearchIcon,
+  FleetTrashIcon,
+  FleetTruckIcon,
+  FleetUserIcon
+} from "../components/FleetIcons";
 import { LORRY_TYPES, lorryTypeLabel } from "../utils/fleetLabels";
+
+function FleetInputField({ icon: Icon, children, className = "" }) {
+  return (
+    <label className={`fleet-input-field ${className}`.trim()}>
+      <span className="fleet-input-icon" aria-hidden="true">
+        <Icon />
+      </span>
+      {children}
+    </label>
+  );
+}
+
+function formatAssignedDate(value) {
+  if (!value) return "-";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "-";
+  return date.toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" });
+}
 
 export default function AddLorryPage({
   form,
@@ -13,7 +40,8 @@ export default function AddLorryPage({
   onDeleteLorry = () => {},
   onUpdateAssignment = () => {},
   onSubmit,
-  language = "en"
+  language = "en",
+  compact = false
 }) {
   const t = (en, te) => (language === "te" ? te : en);
   const types = LORRY_TYPES;
@@ -72,7 +100,7 @@ export default function AddLorryPage({
     setEditingAssignmentId(assignment.id);
     setEditingAssignment({
       driver_id: String(assignment.driver_id || ""),
-      assigned_at: assignment.assigned_at ? String(assignment.assigned_at).slice(0, 16) : ""
+      assigned_at: assignment.assigned_at ? String(assignment.assigned_at).slice(0, 10) : ""
     });
   };
 
@@ -88,121 +116,285 @@ export default function AddLorryPage({
 
   const selectedVehicleNumber = selectedLorryHistory?.vehicle_number || null;
 
-  return (
-    <section className="panel fleet-ops-shell">
-      <div className="fleet-header-row">
-        <div className="fleet-header-copy">
-          <div className="fleet-kicker-row">
-            <span className="fleet-kicker">{t("Fleet control", "\u0c2b\u0c4d\u0c32\u0c40\u0c1f\u0c4d \u0c15\u0c02\u0c1f\u0c4d\u0c30\u0c4b\u0c32\u0c4d")}</span>
-            <span className="fleet-kicker soft">{t("Quick dispatch ready", "\u0c24\u0c4d\u0c35\u0c30\u0c3f\u0c24 \u0c21\u0c3f\u0c38\u0c4d\u0c2a\u0c3e\u0c1a\u0c4d \u0c15\u0c3f \u0c38\u0c3f\u0c26\u0c4d\u0c27\u0c02")}</span>
-          </div>
-          <h2>{t("Add Lorry", "\u0c32\u0c3e\u0c30\u0c40 \u0c1a\u0c47\u0c30\u0c4d\u0c1a\u0c41")}</h2>
-          <p className="muted">
-            {t(
-              "For large fleets, keep input quick and manage the lorry list through search, filters, and a dense operations table.",
-              "\u0c2a\u0c46\u0c26\u0c4d\u0c26 \u0c2b\u0c4d\u0c32\u0c40\u0c1f\u0c4d\u0c32\u0c15\u0c41 \u0c35\u0c3e\u0c39\u0c28\u0c3e\u0c32 \u0c1a\u0c47\u0c30\u0c4d\u0c2a\u0c41 \u0c35\u0c47\u0c17\u0c02\u0c17\u0c3e \u0c09\u0c02\u0c21\u0c3e\u0c32\u0c3f, \u0c15\u0c3e\u0c28\u0c40 \u0c32\u0c3f\u0c38\u0c4d\u0c1f\u0c4d\u200c\u0c28\u0c41 \u0c38\u0c46\u0c30\u0c4d\u0c1a\u0c4d, \u0c2b\u0c3f\u0c32\u0c4d\u0c1f\u0c30\u0c4d, \u0c15\u0c3e\u0c02\u0c2a\u0c3e\u0c15\u0c4d\u0c1f\u0c4d \u0c1f\u0c47\u0c2c\u0c41\u0c32\u0c4d\u200c\u0c24\u0c4b \u0c28\u0c3f\u0c30\u0c4d\u0c35\u0c39\u0c3f\u0c02\u0c1a\u0c02\u0c21\u0c3f."
-            )}
-          </p>
-        </div>
+  const renderLorryRow = (lorry) => {
+    const activeAssignment = activeAssignmentsByLorry.get(lorry.id);
+    const driverName = drivers.find((item) => item.id === (activeAssignment?.driver_id ?? lorry.driver_id))?.name || "-";
+    const isEditing = editingAssignmentId === activeAssignment?.id;
+    const assignedLabel = activeAssignment?.assigned_at ? formatAssignedDate(activeAssignment.assigned_at) : "-";
+    const isActive = Boolean(lorry.is_active);
 
-        <div className="fleet-stats-grid">
-          <div className="workspace-metric">
-            <span>{t("Total", "\u0c2e\u0c4a\u0c24\u0c4d\u0c24\u0c02")}</span>
-            <strong>{fleetStats.total}</strong>
+    return (
+      <Fragment key={lorry.id}>
+        <tr
+          className={`fleet-row ${selectedVehicleNumber === lorry.vehicle_number ? "selected" : ""}`}
+          onClick={() => onSelectLorry(lorry)}
+        >
+          <td data-label={t("Vehicle", "వాహనం")}>
+            <div className="fleet-vehicle-cell">
+              <span className="fleet-vehicle-avatar" aria-hidden="true">
+                <FleetTruckIcon />
+              </span>
+              <div>
+                <strong>{lorry.vehicle_number}</strong>
+                <span>{t("Tap to inspect history", "చరిత్ర చూడటానికి నొక్కండి")}</span>
+              </div>
+            </div>
+          </td>
+          <td data-label={t("Type", "రకం")}>{lorryTypeLabel(lorry.lorry_type || form.lorry_type, language) || "-"}</td>
+          <td data-label={t("Driver & Assigned", "డ్రైవర్ & కేటాయింపు")}>
+            <div className="fleet-driver-assigned">
+              <span>{driverName}</span>
+              <small>{assignedLabel}</small>
+            </div>
+          </td>
+          <td data-label={t("Status", "స్థితి")}>
+            <span className={`fleet-status-pill ${isActive ? "is-active" : "is-inactive"}`}>
+              <span className="fleet-status-dot" aria-hidden="true" />
+              {isActive ? t("Active", "యాక్టివ్") : t("Inactive", "ఇనాక్టివ్")}
+            </span>
+          </td>
+          <td data-label={t("Actions", "చర్యలు")}>
+            <div className="fleet-row-actions" onClick={(event) => event.stopPropagation()}>
+              {activeAssignment ? (
+                <button type="button" className="ghost fleet-inline-btn fleet-inline-btn-soft" onClick={() => startEditing(activeAssignment)}>
+                  {t("Edit", "ఎడిట్")}
+                </button>
+              ) : null}
+              <button
+                type="button"
+                className="ghost fleet-inline-btn fleet-inline-btn-alert"
+                onClick={() => onToggleLorryStatus(lorry)}
+              >
+                {isActive ? t("Disable", "డిసేబుల్") : t("Enable", "ఎనేబుల్")}
+              </button>
+              <button
+                type="button"
+                className="ghost fleet-inline-btn fleet-inline-btn-danger"
+                onClick={() => onDeleteLorry(lorry)}
+              >
+                <FleetTrashIcon />
+                {t("Delete", "తొలగించు")}
+              </button>
+            </div>
+          </td>
+        </tr>
+        {isEditing ? (
+          <tr className="fleet-edit-row">
+            <td colSpan="5">
+              <div className="fleet-edit-grid">
+                <select
+                  className="fleet-compact-input"
+                  value={editingAssignment.driver_id}
+                  onChange={(e) => setEditingAssignment((current) => ({ ...current, driver_id: e.target.value }))}
+                >
+                  <option value="">{t("Select Driver", "డ్రైవర్ ఎంచుకోండి")}</option>
+                  {drivers.map((driver) => (
+                    <option key={driver.id} value={driver.id}>
+                      {driver.name}
+                    </option>
+                  ))}
+                </select>
+                <input
+                  className="fleet-compact-input"
+                  type="date"
+                  value={editingAssignment.assigned_at}
+                  onChange={(e) => setEditingAssignment((current) => ({ ...current, assigned_at: e.target.value }))}
+                />
+                <button type="button" className="fleet-inline-btn" onClick={saveAssignmentEdit}>
+                  {t("Update Assignment", "కేటాయింపు అప్డేట్")}
+                </button>
+                <button
+                  type="button"
+                  className="ghost fleet-inline-btn"
+                  onClick={() => {
+                    setEditingAssignmentId(null);
+                    setEditingAssignment({ driver_id: "", assigned_at: "" });
+                  }}
+                >
+                  {t("Cancel", "రద్దు")}
+                </button>
+              </div>
+            </td>
+          </tr>
+        ) : null}
+      </Fragment>
+    );
+  };
+
+  const statItems = [
+    {
+      key: "total",
+      value: fleetStats.total,
+      label: compact ? t("Total", "మొత్తం") : t("TOTAL", "మొత్తం"),
+      icon: FleetTruckIcon,
+      tone: "blue"
+    },
+    {
+      key: "assigned",
+      value: fleetStats.assigned,
+      label: compact ? t("Assigned", "కేటా") : t("ASSIGNED", "కేటాయించబడిన"),
+      icon: FleetUserIcon,
+      tone: "teal"
+    },
+    {
+      key: "inactive",
+      value: fleetStats.inactive,
+      label: compact ? t("Inactive", "ఆఫ్") : t("INACTIVE", "ఇనాక్టివ్"),
+      icon: FleetInactiveIcon,
+      tone: "amber"
+    }
+  ];
+
+  return (
+    <section className={`panel fleet-ops-shell${compact ? " fleet-ops-shell--compact" : ""}`}>
+      <div className={`fleet-header-row${compact ? " fleet-header-row--compact" : ""}`}>
+        {!compact ? (
+          <div className="fleet-header-copy">
+            <h2 className="fleet-page-title">{t("Add Lorry", "లారీ చేర్చు")}</h2>
+            <p className="muted">
+              {t(
+                "Register new vehicles and connect them to your active team.",
+                "కొత్త వాహనాలను నమోదు చేసి మీ బృందంతో అనుసంధానించండి."
+              )}
+            </p>
           </div>
-          <div className="workspace-metric">
-            <span>{t("Assigned", "\u0c15\u0c47\u0c1f\u0c3e\u0c2f\u0c3f\u0c02\u0c1a\u0c3f\u0c28\u0c35\u0c3f")}</span>
-            <strong>{fleetStats.assigned}</strong>
-          </div>
-          <div className="workspace-metric">
-            <span>{t("Inactive", "\u0c07\u0c28\u0c3e\u0c15\u0c4d\u0c1f\u0c3f\u0c35\u0c4d")}</span>
-            <strong>{fleetStats.inactive}</strong>
-          </div>
+        ) : null}
+
+        <div className={compact ? "fleet-stat-strip" : "fleet-stats-grid"}>
+          {statItems.map((item) => {
+            const Icon = item.icon;
+            if (compact) {
+              return (
+                <div className="fleet-stat-mini" key={item.key}>
+                  <span className={`fleet-stat-icon fleet-stat-icon-${item.tone}`} aria-hidden="true">
+                    <Icon />
+                  </span>
+                  <div className="fleet-stat-mini-copy">
+                    <strong>{item.value}</strong>
+                    <span>{item.label}</span>
+                  </div>
+                </div>
+              );
+            }
+            return (
+              <div className="fleet-stat-card" key={item.key}>
+                <div>
+                  <span>{item.label}</span>
+                  <strong>{item.value}</strong>
+                </div>
+                <span className={`fleet-stat-icon fleet-stat-icon-${item.tone}`} aria-hidden="true">
+                  <Icon />
+                </span>
+              </div>
+            );
+          })}
         </div>
       </div>
 
       <div className="card fleet-quick-panel">
         <div className="fleet-panel-head">
           <div>
-            <h3>{t("Quick Add", "\u0c24\u0c4d\u0c35\u0c30\u0c17\u0c3e \u0c1a\u0c47\u0c30\u0c4d\u0c1a\u0c41")}</h3>
-            <p className="muted">{t("Register a new lorry in one compact row.", "\u0c12\u0c15 \u0c15\u0c3e\u0c02\u0c2a\u0c3e\u0c15\u0c4d\u0c1f\u0c4d \u0c30\u0c4b\u0c32\u0c4b \u0c15\u0c4a\u0c24\u0c4d\u0c24 \u0c32\u0c3e\u0c30\u0c40 \u0c1a\u0c47\u0c30\u0c4d\u0c1a\u0c02\u0c21\u0c3f.")}</p>
+            <h3>{t("Quick Add", "త్వరగా చేర్చు")}</h3>
+            {!compact ? (
+              <p className="muted">
+                {t("Register a new lorry in one compact row.", "ఒక కాంపాక్ట్ రోలో కొత్త లారీ నమోదు చేయండి.")}
+              </p>
+            ) : null}
           </div>
           <div className="fleet-helper-chips">
-            <span className="fleet-helper-chip">{t("Compact input", "\u0c15\u0c3e\u0c02\u0c2a\u0c3e\u0c15\u0c4d\u0c1f\u0c4d \u0c07\u0c28\u0c4d\u0c2a\u0c41\u0c1f\u0c4d")}</span>
-            <span className="fleet-helper-chip soft">{t("Large fleet ready", "\u0c2a\u0c46\u0c26\u0c4d\u0c26 \u0c2b\u0c4d\u0c32\u0c40\u0c1f\u0c4d \u0c15\u0c3f \u0c38\u0c3f\u0c26\u0c4d\u0c27\u0c02")}</span>
+            <span className="fleet-helper-chip">{t("Compact input", "కాంపాక్ట్ ఇన్పుట్")}</span>
+            <span className="fleet-helper-chip soft">{t("Large fleet ready", "పెద్ద ఫ్లీట్ కి సిద్ధం")}</span>
           </div>
         </div>
         <form className="fleet-quick-form" onSubmit={onSubmit}>
-          <input
-            className="fleet-compact-input"
-            placeholder={t("Vehicle Number", "\u0c35\u0c3e\u0c39\u0c28\u0c02 \u0c28\u0c02\u0c2c\u0c30\u0c4d")}
-            value={form.vehicle_number}
-            onChange={(e) => setForm({ ...form, vehicle_number: e.target.value })}
-            required
-          />
-          <select
-            className="fleet-compact-input"
-            value={form.lorry_type}
-            onChange={(e) => setForm({ ...form, lorry_type: e.target.value })}
-          >
-            {types.map((type) => (
-              <option key={type} value={type}>
-                {lorryTypeLabel(type, language)}
-              </option>
-            ))}
-          </select>
-          <select
-            className="fleet-compact-input"
-            value={form.driver_id}
-            onChange={(e) => setForm({ ...form, driver_id: e.target.value })}
-          >
-            <option value="">{t("Assign Driver", "\u0c21\u0c4d\u0c30\u0c48\u0c35\u0c30\u0c4d \u0c15\u0c47\u0c1f\u0c3e\u0c2f\u0c3f\u0c02\u0c1a\u0c41")}</option>
-            {drivers.map((driver) => (
-              <option value={driver.id} key={driver.id}>{driver.name}</option>
-            ))}
-          </select>
-          <input
-            className="fleet-compact-input"
-            type="datetime-local"
-            value={form.assigned_at || ""}
-            onChange={(e) => setForm({ ...form, assigned_at: e.target.value })}
-            placeholder={t("Assigned At", "\u0c15\u0c47\u0c1f\u0c3e\u0c2f\u0c3f\u0c02\u0c1a\u0c3f\u0c28 \u0c38\u0c2e\u0c2f\u0c02")}
-          />
-          <button type="submit" className="fleet-save-btn">{t("Save", "\u0c38\u0c47\u0c35\u0c4d")}</button>
+          <FleetInputField icon={FleetPlateIcon} className="fleet-field-vehicle">
+            <input
+              className="fleet-compact-input"
+              placeholder={t("Vehicle Number", "వాహన నంబర్")}
+              value={form.vehicle_number}
+              onChange={(e) => setForm({ ...form, vehicle_number: e.target.value })}
+              required
+            />
+          </FleetInputField>
+          <FleetInputField icon={FleetTruckIcon} className="fleet-field-type">
+            <select
+              className="fleet-compact-input"
+              value={form.lorry_type}
+              onChange={(e) => setForm({ ...form, lorry_type: e.target.value })}
+            >
+              {types.map((type) => (
+                <option key={type} value={type}>
+                  {lorryTypeLabel(type, language)}
+                </option>
+              ))}
+            </select>
+          </FleetInputField>
+          <FleetInputField icon={FleetUserIcon} className="fleet-field-driver">
+            <select
+              className="fleet-compact-input"
+              value={form.driver_id}
+              onChange={(e) => setForm({ ...form, driver_id: e.target.value })}
+            >
+              <option value="">{t("Assign Driver", "డ్రైవర్ కేటాయించు")}</option>
+              {drivers.map((driver) => (
+                <option value={driver.id} key={driver.id}>
+                  {driver.name}
+                </option>
+              ))}
+            </select>
+          </FleetInputField>
+          <FleetInputField icon={FleetCalendarIcon} className="fleet-field-date">
+            <input
+              className="fleet-compact-input"
+              type="date"
+              value={form.assigned_at ? String(form.assigned_at).slice(0, 10) : ""}
+              onChange={(e) => setForm({ ...form, assigned_at: e.target.value })}
+            />
+          </FleetInputField>
+          <button type="submit" className="fleet-save-btn">
+            {t("Save", "సేవ్")}
+          </button>
         </form>
       </div>
 
       <div className="card fleet-list-shell">
         <div className="fleet-list-toolbar">
-          <div>
-            <h3>{t("Fleet List", "\u0c32\u0c3e\u0c30\u0c40 \u0c1c\u0c3e\u0c2c\u0c3f\u0c24\u0c3e")}</h3>
+          <div className="fleet-list-title-block">
+            <h3>{t("Fleet List", "లారీ జాబితా")}</h3>
             <p className="muted">
-              {t("Showing", "\u0c1a\u0c42\u0c2a\u0c3f\u0c38\u0c4d\u0c24\u0c41\u0c28\u0c4d\u0c28\u0c35\u0c3f")} {filteredLorries.length} / {lorries.length}
+              {t("Showing", "చూపిస్తున్నది")} {filteredLorries.length} / {lorries.length}{" "}
+              {t("vehicles", "వాహనాలు")}
             </p>
           </div>
 
           <div className="fleet-list-summary">
-            <span className="fleet-summary-pill">{fleetStats.active} {t("active", "\u0c2f\u0c3e\u0c15\u0c4d\u0c1f\u0c3f\u0c35\u0c4d")}</span>
-            <span className="fleet-summary-pill soft">{fleetStats.assigned} {t("assigned", "\u0c15\u0c47\u0c1f\u0c3e\u0c2f\u0c3f\u0c02\u0c1a\u0c3f\u0c28")}</span>
+            <span className="fleet-summary-pill">
+              {fleetStats.active} {t("Active", "యాక్టివ్")}
+            </span>
+            <span className="fleet-summary-pill soft">
+              {fleetStats.assigned} {t("Assigned", "కేటాయించబడిన")}
+            </span>
           </div>
 
           <div className="fleet-list-controls">
-            <input
-              className="fleet-compact-input"
-              placeholder={t("Search by number or driver", "\u0c28\u0c02\u0c2c\u0c30\u0c4d \u0c32\u0c47\u0c26\u0c3e \u0c21\u0c4d\u0c30\u0c48\u0c35\u0c30\u0c4d \u0c26\u0c4d\u0c35\u0c3e\u0c30\u0c3e \u0c38\u0c46\u0c30\u0c4d\u0c1a\u0c4d")}
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-            />
+            <FleetInputField icon={FleetSearchIcon} className="fleet-search-field">
+              <input
+                className="fleet-compact-input"
+                placeholder={t("Search by number or driver", "నంబర్ లేదా డ్రైవర్ ద్వారా శోధించు")}
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+              />
+            </FleetInputField>
             <select
-              className="fleet-compact-input"
+              className="fleet-compact-input fleet-filter-select"
               value={statusFilter}
               onChange={(e) => setStatusFilter(e.target.value)}
             >
-              <option value="all">{t("All", "\u0c05\u0c28\u0c4d\u0c28\u0c3f")}</option>
-              <option value="active">{t("Active", "\u0c2f\u0c3e\u0c15\u0c4d\u0c1f\u0c3f\u0c35\u0c4d")}</option>
-              <option value="inactive">{t("Inactive", "\u0c07\u0c28\u0c3e\u0c15\u0c4d\u0c1f\u0c3f\u0c35\u0c4d")}</option>
-              <option value="assigned">{t("Assigned", "\u0c15\u0c47\u0c1f\u0c3e\u0c2f\u0c3f\u0c02\u0c1a\u0c3f\u0c28\u0c35\u0c3f")}</option>
-              <option value="unassigned">{t("Unassigned", "\u0c15\u0c47\u0c1f\u0c3e\u0c2f\u0c3f\u0c02\u0c1a\u0c28\u0c3f\u0c35\u0c3f")}</option>
+              <option value="all">{t("All", "అన్ని")}</option>
+              <option value="active">{t("Active", "యాక్టివ్")}</option>
+              <option value="inactive">{t("Inactive", "ఇనాక్టివ్")}</option>
+              <option value="assigned">{t("Assigned", "కేటాయించబడిన")}</option>
+              <option value="unassigned">{t("Unassigned", "కేటాయించనివి")}</option>
             </select>
           </div>
         </div>
@@ -211,104 +403,18 @@ export default function AddLorryPage({
           <table className="data-table fleet-table">
             <thead>
               <tr>
-                <th>{t("Vehicle", "\u0c35\u0c3e\u0c39\u0c28\u0c02")}</th>
-                <th>{t("Type", "\u0c30\u0c15\u0c02")}</th>
-                <th>{t("Driver", "\u0c21\u0c4d\u0c30\u0c48\u0c35\u0c30\u0c4d")}</th>
-                <th>{t("Assigned", "\u0c15\u0c47\u0c1f\u0c3e\u0c2f\u0c3f\u0c02\u0c1a\u0c3f\u0c28\u0c26\u0c3f")}</th>
-                <th>{t("Status", "\u0c38\u0c4d\u0c25\u0c3f\u0c24\u0c3f")}</th>
-                <th>{t("Actions", "\u0c1a\u0c30\u0c4d\u0c2f\u0c32\u0c41")}</th>
+                <th>{t("Vehicle", "వాహనం")}</th>
+                <th>{t("Type", "రకం")}</th>
+                <th>{t("Driver & Assigned", "డ్రైవర్ & కేటాయింపు")}</th>
+                <th>{t("Status", "స్థితి")}</th>
+                <th>{t("Actions", "చర్యలు")}</th>
               </tr>
             </thead>
-            <tbody>
-              {filteredLorries.map((lorry) => {
-                const activeAssignment = activeAssignmentsByLorry.get(lorry.id);
-                const driverName = drivers.find((item) => item.id === (activeAssignment?.driver_id ?? lorry.driver_id))?.name || "-";
-                const isEditing = editingAssignmentId === activeAssignment?.id;
-                return (
-                  <Fragment key={lorry.id}>
-                    <tr
-                      className={`fleet-row ${selectedVehicleNumber === lorry.vehicle_number ? "selected" : ""}`}
-                      onClick={() => onSelectLorry(lorry)}
-                    >
-                      <td>
-                        <div className="fleet-vehicle-cell">
-                          <strong>{lorry.vehicle_number}</strong>
-                          <span>{t("Tap to inspect history", "\u0c1a\u0c30\u0c3f\u0c24\u0c4d\u0c30 \u0c1a\u0c42\u0c21\u0c1f\u0c3e\u0c28\u0c3f\u0c15\u0c3f \u0c28\u0c4a\u0c15\u0c4d\u0c15\u0c02\u0c21\u0c3f")}</span>
-                        </div>
-                      </td>
-                      <td>{lorryTypeLabel(lorry.lorry_type || form.lorry_type, language) || "-"}</td>
-                      <td>{driverName}</td>
-                      <td>{activeAssignment?.assigned_at ? new Date(activeAssignment.assigned_at).toLocaleDateString() : "-"}</td>
-                      <td>
-                        <span className={`status-pill ${lorry.is_active ? "status-done" : "status-neutral"}`}>
-                          {lorry.is_active ? t("Active", "\u0c2f\u0c3e\u0c15\u0c4d\u0c1f\u0c3f\u0c35\u0c4d") : t("Inactive", "\u0c07\u0c28\u0c3e\u0c15\u0c4d\u0c1f\u0c3f\u0c35\u0c4d")}
-                        </span>
-                      </td>
-                      <td>
-                        <div className="fleet-row-actions" onClick={(event) => event.stopPropagation()}>
-                          {activeAssignment ? (
-                            <button type="button" className="ghost fleet-inline-btn fleet-inline-btn-soft" onClick={() => startEditing(activeAssignment)}>
-                              {t("Edit", "\u0c0e\u0c21\u0c3f\u0c1f\u0c4d")}
-                            </button>
-                          ) : null}
-                          <button
-                            type="button"
-                            className="ghost fleet-inline-btn fleet-inline-btn-alert"
-                            onClick={() => onToggleLorryStatus(lorry)}
-                          >
-                            {lorry.is_active ? t("Disable", "\u0c21\u0c3f\u0c38\u0c47\u0c2c\u0c41\u0c32\u0c4d") : t("Enable", "\u0c0e\u0c28\u0c47\u0c2c\u0c41\u0c32\u0c4d")}
-                          </button>
-                          <button
-                            type="button"
-                            className="ghost fleet-inline-btn driver-delete-btn"
-                            onClick={() => onDeleteLorry(lorry)}
-                          >
-                            {t("Delete", "తొలగించు")}
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                    {isEditing ? (
-                      <tr className="fleet-edit-row">
-                        <td colSpan="6">
-                          <div className="fleet-edit-grid">
-                            <select
-                              className="fleet-compact-input"
-                              value={editingAssignment.driver_id}
-                              onChange={(e) => setEditingAssignment((current) => ({ ...current, driver_id: e.target.value }))}
-                            >
-                              <option value="">{t("Select Driver", "\u0c21\u0c4d\u0c30\u0c48\u0c35\u0c30\u0c4d \u0c0e\u0c02\u0c1a\u0c41\u0c15\u0c4b\u0c02\u0c21\u0c3f")}</option>
-                              {drivers.map((driver) => <option key={driver.id} value={driver.id}>{driver.name}</option>)}
-                            </select>
-                            <input
-                              className="fleet-compact-input"
-                              type="datetime-local"
-                              value={editingAssignment.assigned_at}
-                              onChange={(e) => setEditingAssignment((current) => ({ ...current, assigned_at: e.target.value }))}
-                            />
-                            <button type="button" className="fleet-inline-btn" onClick={saveAssignmentEdit}>
-                              {t("Update Assignment", "\u0c15\u0c47\u0c1f\u0c3e\u0c2f\u0c3f\u0c02\u0c2a\u0c41 \u0c05\u0c2a\u0c4d\u0c21\u0c47\u0c1f\u0c4d")}
-                            </button>
-                            <button
-                              type="button"
-                              className="ghost fleet-inline-btn"
-                              onClick={() => {
-                                setEditingAssignmentId(null);
-                                setEditingAssignment({ driver_id: "", assigned_at: "" });
-                              }}
-                            >
-                              {t("Cancel", "\u0c30\u0c26\u0c4d\u0c26\u0c41")}
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                    ) : null}
-                  </Fragment>
-                );
-              })}
-            </tbody>
+            <tbody>{filteredLorries.map(renderLorryRow)}</tbody>
           </table>
-          {!filteredLorries.length ? <p className="muted">{t("No lorries matched your search.", "\u0c2e\u0c40 \u0c38\u0c46\u0c30\u0c4d\u0c1a\u0c4d\u200c\u0c15\u0c41 \u0c24\u0c17\u0c4d\u0c17 \u0c32\u0c3e\u0c30\u0c40\u0c32\u0c41 \u0c32\u0c47\u0c35\u0c41.")}</p> : null}
+          {!filteredLorries.length ? (
+            <p className="fleet-empty-state muted">{t("No lorries matched your search.", "మీ శోధనకు సరిపోయే లారీలు లేవు.")}</p>
+          ) : null}
         </div>
       </div>
 
@@ -316,40 +422,73 @@ export default function AddLorryPage({
         <div className="card fleet-history-shell">
           <div className="fleet-panel-head">
             <div>
-              <h3>{t("Lorry History", "\u0c32\u0c3e\u0c30\u0c40 \u0c1a\u0c30\u0c3f\u0c24\u0c4d\u0c30")} - {selectedLorryHistory.vehicle_number}</h3>
-              <p className="muted">{t("Performance snapshot for the selected vehicle.", "\u0c0e\u0c02\u0c2a\u0c3f\u0c15 \u0c1a\u0c47\u0c38\u0c3f\u0c28 \u0c35\u0c3e\u0c39\u0c28\u0c02 \u0c15\u0c4b\u0c38\u0c02 \u0c2a\u0c28\u0c3f\u0c24\u0c40\u0c30\u0c41 \u0c1a\u0c3f\u0c9f\u0c4d\u0c30\u0c02.")}</p>
+              <h3>
+                {t("Lorry History", "లారీ చరిత్ర")} - {selectedLorryHistory.vehicle_number}
+              </h3>
+              <p className="muted">
+                {t("Performance snapshot for the selected vehicle.", "ఎంపిక చేసిన వాహనం కోసం పనితీరు సారాంశం.")}
+              </p>
             </div>
-            <span className="fleet-summary-pill">{selectedLorryHistory.total_trips} {t("trips", "\u0c1f\u0c4d\u0c30\u0c3f\u0c2a\u0c4d\u0c38\u0c4d")}</span>
+            <span className="fleet-summary-pill">
+              {selectedLorryHistory.total_trips} {t("trips", "ట్రిప్స్")}
+            </span>
           </div>
           <div className="fleet-history-grid">
             <div className="detail-card">
-              <span>{t("Total Trips", "\u0c2e\u0c4a\u0c24\u0c4d\u0c24\u0c02 \u0c1f\u0c4d\u0c30\u0c3f\u0c2a\u0c4d\u0c38\u0c4d")}</span>
+              <span>{t("Total Trips", "మొత్తం ట్రిప్స్")}</span>
               <strong>{selectedLorryHistory.total_trips}</strong>
             </div>
             <div className="detail-card">
-              <span>{t("Total Income", "\u0c2e\u0c4a\u0c24\u0c4d\u0c24\u0c02 \u0c06\u0c26\u0c3e\u0c2f\u0c02")}</span>
+              <span>{t("Total Income", "మొత్తం ఆదాయం")}</span>
               <strong>Rs.{selectedLorryHistory.total_income?.toFixed(2)}</strong>
             </div>
             <div className="detail-card">
-              <span>{t("Total Expenses", "\u0c2e\u0c4a\u0c24\u0c4d\u0c24\u0c02 \u0c16\u0c30\u0c4d\u0c1a\u0c41\u0c32\u0c41")}</span>
+              <span>{t("Total Expenses", "మొత్తం ఖర్చులు")}</span>
               <strong>Rs.{selectedLorryHistory.total_expenses?.toFixed(2)}</strong>
             </div>
             <div className="detail-card">
-              <span>{t("Total Profit", "\u0c2e\u0c4a\u0c24\u0c4d\u0c24\u0c02 \u0c32\u0c3e\u0c2d\u0c02")}</span>
+              <span>{t("Total Profit", "మొత్తం లాభం")}</span>
               <strong>Rs.{selectedLorryHistory.total_profit?.toFixed(2)}</strong>
             </div>
           </div>
           <div className="cards-list">
             {selectedLorryHistory.trips?.map((trip) => (
               <div className="mini-card" key={trip.trip_id}>
-                <p>#{trip.trip_id} - {trip.route}</p>
-                <p>{t("Driver", "\u0c21\u0c4d\u0c30\u0c48\u0c35\u0c30\u0c4d")}: {trip.driver_name || trip.driver_id}</p>
-                <p>{t("Income", "\u0c06\u0c26\u0c3e\u0c2f\u0c02")}: Rs.{trip.load_price?.toFixed(2)}</p>
-                <p>{t("Expense", "\u0c16\u0c30\u0c4d\u0c1a\u0c41")}: Rs.{trip.trip_expenses?.toFixed(2)}</p>
-                <p>{t("Profit", "\u0c32\u0c3e\u0c2d\u0c02")}: Rs.{trip.lorry_profit?.toFixed(2)}</p>
+                <p>
+                  #{trip.trip_id} - {trip.route}
+                </p>
+                <p>
+                  {t("Driver", "డ్రైవర్")}: {trip.driver_name || trip.driver_id}
+                </p>
+                <p>
+                  {t("Income", "ఆదాయం")}: Rs.{trip.load_price?.toFixed(2)}
+                </p>
+                <p>
+                  {t("Expense", "ఖర్చు")}: Rs.{trip.trip_expenses?.toFixed(2)}
+                </p>
+                <p>
+                  {t("Profit", "లాభం")}: Rs.{trip.lorry_profit?.toFixed(2)}
+                </p>
               </div>
             ))}
           </div>
+        </div>
+      ) : null}
+
+      {!compact ? (
+        <div className="fleet-footer-banner" aria-hidden="true">
+          <div className="fleet-footer-copy">
+            <strong>{t("Move Smart. Move Easy.", "స్మార్ట్‌గా. సులభంగా.")}</strong>
+            <p>
+              {t(
+                "Manage your fleet efficiently and keep your business moving forward.",
+                "మీ ఫ్లీట్‌ను సమర్థవంతంగా నిర్వహించండి మరియు మీ వ్యాపారాన్ని ముందుకు నడపండి."
+              )}
+            </p>
+          </div>
+          <span className="fleet-footer-truck">
+            <FleetTruckIcon />
+          </span>
         </div>
       ) : null}
     </section>

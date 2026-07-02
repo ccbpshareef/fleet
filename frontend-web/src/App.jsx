@@ -22,6 +22,8 @@ import MobileReportsPage from "./pages/mobile/MobileReportsPage";
 import MobileTripContactsPage from "./pages/mobile/MobileTripContactsPage";
 import MobileMorePage from "./pages/mobile/MobileMorePage";
 import { formatMoney, languageToggleLabel, na, activeLabel, roleLabel } from "./utils/i18n";
+import { parseApiDetail } from "./utils/parseApiError";
+import { asFleetList, upsertFleetItem } from "./utils/fleetApiCore";
 import {
   computeDashboardFromTrips,
   filterTripsByDriver,
@@ -31,7 +33,7 @@ import {
 } from "./utils/periodFilter";
 import { computeAssignmentPaySummary, computeDriverEarningsSummary } from "./utils/driverEarnings";
 import { roundMoney } from "./utils/money";
-import { commissionProgressText, commissionRuleText } from "./utils/commission";
+import { commissionProgressText, commissionRuleText, stintCommissionTotal } from "./utils/commission";
 import {
   buildDriverCreatePayload,
   driverCredentialClipboardText,
@@ -276,6 +278,7 @@ export default function App() {
   const [isSavingProfile, setIsSavingProfile] = useState(false);
   const [isEditingProfile, setIsEditingProfile] = useState(false);
   const [showProfilePanel, setShowProfilePanel] = useState(false);
+  const [confirmDialog, setConfirmDialog] = useState(null);
   const [scopeUsers, setScopeUsers] = useState([]);
   const [selectedScopeUser, setSelectedScopeUser] = useState("");
   const [activeMobileTab, setActiveMobileTab] = useState("Dashboard");
@@ -283,6 +286,8 @@ export default function App() {
   const [periodFilter, setPeriodFilter] = useState("complete");
   const [driverFilterId, setDriverFilterId] = useState("");
   const isMobile = useIsMobile();
+  const confirmResolverRef = useRef(null);
+  const dataFetchGenerationRef = useRef(0);
 
   const authQuery = useMemo(() => {
     if (!authUser) return null;
@@ -293,36 +298,67 @@ export default function App() {
     return query;
   }, [authUser, selectedScopeUser]);
 
+  function openConfirmDialog(message) {
+    return new Promise((resolve) => {
+      confirmResolverRef.current = resolve;
+      setConfirmDialog({ message });
+    });
+  }
+
+  function closeConfirmDialog(confirmed) {
+    const resolver = confirmResolverRef.current;
+    confirmResolverRef.current = null;
+    setConfirmDialog(null);
+    if (resolver) resolver(Boolean(confirmed));
+  }
+
   async function loadNotifications() {
-    const canLoadNotifications =
-      authQuery?.role === "user" || (authQuery?.role === "admin" && authQuery?.scope_user);
-    if (!canLoadNotifications) {
-      setNotifications([]);
-      return;
-    }
-    const notif = await api.getNotifications(authQuery).catch(() => []);
-    setNotifications(notif || []);
+    // Notifications API is intentionally disabled for now.
+    // Re-enable api.getNotifications(authQuery) when notification module is finalized.
+    setNotifications([]);
   }
 
   async function loadData() {
-    const canLoadNotifications =
-      authQuery?.role === "user" || (authQuery?.role === "admin" && authQuery?.scope_user);
-    const [dash, dr, lo, tr, ex, asg, notif] = await Promise.all([
-      api.getDashboard(authQuery),
-      api.getDrivers(authQuery),
-      api.getLorries(authQuery),
-      api.getTrips(authQuery),
-      api.getExpenses(authQuery),
-      api.getDriverAssignments(authQuery),
-      canLoadNotifications ? api.getNotifications(authQuery).catch(() => []) : Promise.resolve([])
-    ]);
-    setDashboard(dash);
-    setDrivers(dr);
-    setLorries(lo);
-    setTrips(tr);
-    setExpenses(ex);
-    setDriverAssignments(asg);
-    setNotifications(notif || []);
+    if (!authQuery) return;
+
+    const generation = ++dataFetchGenerationRef.current;
+    const query = authQuery;
+
+    const [dashboardRes, driversRes, lorriesRes, tripsRes, expensesRes, assignmentsRes] =
+      await Promise.allSettled([
+        api.getDashboard(query),
+        api.getDrivers(query),
+        api.getLorries(query),
+        api.getTrips(query),
+        api.getExpenses(query),
+        api.getDriverAssignments(query)
+      ]);
+
+    if (generation !== dataFetchGenerationRef.current) {
+      return;
+    }
+
+    if (dashboardRes.status === "fulfilled" && dashboardRes.value != null) {
+      setDashboard(dashboardRes.value);
+    }
+    if (driversRes.status === "fulfilled") {
+      setDrivers(asFleetList(driversRes.value));
+    }
+    if (lorriesRes.status === "fulfilled") {
+      setLorries(asFleetList(lorriesRes.value));
+    }
+    if (tripsRes.status === "fulfilled") {
+      setTrips(asFleetList(tripsRes.value));
+    }
+    if (expensesRes.status === "fulfilled") {
+      setExpenses(asFleetList(expensesRes.value));
+    }
+    if (assignmentsRes.status === "fulfilled") {
+      setDriverAssignments(asFleetList(assignmentsRes.value));
+    }
+
+    // Notifications API disabled for now to avoid polling traffic.
+    setNotifications([]);
   }
 
   const expenseTotalsByTrip = expenses.reduce((acc, item) => {
@@ -384,6 +420,50 @@ export default function App() {
     if (!selectedDriver) return null;
     return computeAssignmentPaySummary(driverAssignments, { driverId: selectedDriver.id });
   }, [selectedDriver, driverAssignments]);
+  const selectedDriverHistoryDerived = useMemo(() => {
+    if (!selectedDriverHistory) return null;
+    const trips = selectedDriverHistory.trips || [];
+    const storedTotalCommission = Number(selectedDriverHistory.total_commission_amount || 0);
+    const transportTotal = Number(selectedDriverHistory.total_transport_amount || 0);
+    const commissionPercent = Number(
+      selectedDriverStintPay?.currentStint?.commission_percent
+        ?? selectedDriverStintPay?.latest?.commission_percent
+        ?? 6
+    );
+    const expectedCommissionTotal = stintCommissionTotal(transportTotal, commissionPercent);
+    const needsFallbackAllocation = storedTotalCommission <= 0 && expectedCommissionTotal > 0 && transportTotal > 0;
+
+    let effectiveTotalCommission = 0;
+    const normalizedTrips = trips.map((trip) => {
+      const tripTransport = Number(trip.transport_amount ?? trip.load_price ?? 0);
+      const storedCommission = Number(trip.commission_amount || 0);
+      const fallbackCommission = needsFallbackAllocation
+        ? roundMoney(expectedCommissionTotal * (tripTransport / transportTotal))
+        : 0;
+      const effectiveCommission = storedCommission > 0 ? storedCommission : fallbackCommission;
+      const effectiveEarning = roundMoney(
+        Number(trip.trip_total_earning ?? trip.driver_earned ?? 0) + (effectiveCommission - storedCommission)
+      );
+      effectiveTotalCommission = roundMoney(effectiveTotalCommission + effectiveCommission);
+      return {
+        ...trip,
+        effective_commission_amount: effectiveCommission,
+        effective_trip_total_earning: effectiveEarning,
+        effective_commission_eligible: effectiveCommission > 0 || Boolean(trip.commission_eligible)
+      };
+    });
+
+    const baseEarningWithoutCommission = roundMoney(
+      Number(selectedDriverHistory.total_driver_earning || 0) - storedTotalCommission
+    );
+    const effectiveTotalEarning = roundMoney(baseEarningWithoutCommission + effectiveTotalCommission);
+
+    return {
+      trips: normalizedTrips,
+      effectiveTotalCommission,
+      effectiveTotalEarning
+    };
+  }, [selectedDriverHistory, selectedDriverStintPay]);
 
   useEffect(() => {
     if (!authUser || authUser.role !== "admin") {
@@ -428,38 +508,11 @@ export default function App() {
   }, [authUser, selectedScopeUser]);
 
   useEffect(() => {
-    const canLoadNotifications =
-      authQuery?.role === "user" || (authQuery?.role === "admin" && authQuery?.scope_user);
-    if (!canLoadNotifications) return;
-    const intervalId = window.setInterval(() => {
-      loadNotifications().catch(() => {});
-    }, 10000);
-    const onVisibility = () => {
-      if (document.visibilityState === "visible") {
-        loadNotifications().catch(() => {});
-      }
-    };
-    document.addEventListener("visibilitychange", onVisibility);
-    return () => {
-      window.clearInterval(intervalId);
-      document.removeEventListener("visibilitychange", onVisibility);
-    };
+    // Notifications polling disabled for now.
+    // Keep state cleared so UI does not request /notifications.
+    setNotifications([]);
+    return () => {};
   }, [authQuery?.role, authQuery?.scope_user, authQuery?.viewer]);
-
-  function parseApiDetail(error, fallback) {
-    const raw = error?.message || "";
-    try {
-      const parsed = JSON.parse(raw);
-      const detail = parsed?.detail;
-      if (typeof detail === "string") return detail;
-      if (Array.isArray(detail)) {
-        return detail.map((item) => (typeof item === "string" ? item : item?.msg || "")).filter(Boolean).join(". ");
-      }
-      return raw || fallback;
-    } catch {
-      return raw || fallback;
-    }
-  }
 
   async function saveDriver() {
     if (authUser?.role !== "user") return;
@@ -490,6 +543,9 @@ export default function App() {
     try {
       const created = await api.createDriver(payload, authQuery);
       setLastDriverCreated(created);
+      if (created?.id) {
+        setDrivers((prev) => upsertFleetItem(prev, created));
+      }
       setNewDriver({ name: "", phone: "", license_number: "", login_identifier: "", password: "" });
       setDriverSaveError("");
       await loadData();
@@ -515,11 +571,28 @@ export default function App() {
 
   async function toggleDriverStatus(driver) {
     if (authUser?.role !== "user") return;
-    await api.updateDriverStatus(driver.id, !driver.is_active, authQuery);
-    if (selectedDriver?.id === driver.id) {
-      await openDriverDetail({ ...driver, is_active: !driver.is_active });
+    try {
+      await api.updateDriverStatus(driver.id, !driver.is_active, authQuery);
+      if (selectedDriver?.id === driver.id) {
+        await openDriverDetail({ ...driver, is_active: !driver.is_active });
+      }
+      await loadData();
+      showToast(
+        driver.is_active
+          ? language === "te"
+            ? `${driver.name} నిలిపివేయబడింది.`
+            : `${driver.name} disabled.`
+          : language === "te"
+            ? `${driver.name} యాక్టివ్ చేయబడింది.`
+            : `${driver.name} enabled.`,
+        "success"
+      );
+    } catch (error) {
+      showToast(
+        parseApiDetail(error, language === "te" ? "డ్రైవర్ స్థితి మార్చడం విఫలమైంది." : "Failed to update driver status."),
+        "error"
+      );
     }
-    await loadData();
   }
 
   async function deleteDriver(driver) {
@@ -528,13 +601,17 @@ export default function App() {
       language === "te"
         ? `${driver.name} ను తొలగించాలా? లైవ్ ట్రిప్‌లతో సహా ఈ డ్రైవర్ ట్రిప్ చరిత్ర, అసైన్‌మెంట్లు మరియు లాగిన్ కూడా తొలగించబడతాయి.`
         : `Delete ${driver.name}? Their live trips, trip history, assignments, and login will also be removed.`;
-    if (!window.confirm(confirmMsg)) return;
+    if (!(await openConfirmDialog(confirmMsg))) return;
     try {
       await api.deleteDriver(driver.id, authQuery);
       if (selectedDriver?.id === driver.id) {
         closeDriverDetail();
       }
       await loadData();
+      showToast(
+        language === "te" ? `${driver.name} తొలగించబడింది.` : `${driver.name} deleted.`,
+        "success"
+      );
     } catch (error) {
       const msg = parseApiDetail(
         error,
@@ -547,23 +624,31 @@ export default function App() {
   async function saveLorry(e) {
     e.preventDefault();
     if (authUser?.role !== "user") return;
+    const vehicleNumber = (newLorry.vehicle_number || "").trim().toUpperCase();
+    if (!vehicleNumber) {
+      showToast(
+        language === "te" ? "వాహన నంబర్ అవసరం." : "Vehicle number is required.",
+        "error"
+      );
+      return;
+    }
     try {
-      await api.createLorry(
+      const created = await api.createLorry(
         {
-          vehicle_number: newLorry.vehicle_number,
+          vehicle_number: vehicleNumber,
           current_location: "",
           driver_id: null
         },
         authQuery
       );
-      const latestLorry = await api.getLorries(authQuery).then((items) =>
-        items.find((item) => item.vehicle_number === newLorry.vehicle_number)
-      );
-      if (latestLorry && newLorry.driver_id) {
+      if (created?.id) {
+        setLorries((prev) => upsertFleetItem(prev, created));
+      }
+      if (created?.id && newLorry.driver_id) {
         await api.createDriverAssignment(
           {
             driver_id: Number(newLorry.driver_id),
-            lorry_id: latestLorry.id,
+            lorry_id: created.id,
             assigned_at: newLorry.assigned_at || null
           },
           authQuery
@@ -571,6 +656,10 @@ export default function App() {
       }
       setNewLorry({ vehicle_number: "", lorry_type: "Open Body", driver_id: "", assigned_at: "" });
       await loadData();
+      showToast(
+        language === "te" ? "లారీ విజయవంతంగా సేవ్ అయింది." : "Lorry saved successfully.",
+        "success"
+      );
     } catch (error) {
       const msg = parseApiDetail(
         error,
@@ -586,13 +675,19 @@ export default function App() {
       language === "te"
         ? `${lorry.vehicle_number} లారీని తొలగించాలా? దీనికి సంబంధించిన ట్రిప్ చరిత్ర కూడా తొలగించబడుతుంది.`
         : `Delete lorry ${lorry.vehicle_number}? Related trip history will also be removed.`;
-    if (!window.confirm(confirmMsg)) return;
+    if (!(await openConfirmDialog(confirmMsg))) return;
     try {
       await api.deleteLorry(lorry.id, authQuery);
       if (selectedLorryHistory?.lorry_id === lorry.id) {
         setSelectedLorryHistory(null);
       }
       await loadData();
+      showToast(
+        language === "te"
+          ? `${lorry.vehicle_number} తొలగించబడింది.`
+          : `Lorry ${lorry.vehicle_number} deleted.`,
+        "success"
+      );
     } catch (error) {
       const msg = parseApiDetail(
         error,
@@ -604,12 +699,29 @@ export default function App() {
 
   async function toggleLorryStatus(lorry) {
     if (authUser?.role !== "user") return;
-    await api.updateLorryStatus(lorry.id, !lorry.is_active, authQuery);
-    if (selectedLorryHistory?.lorry_id === lorry.id) {
-      const latest = await api.getLorryHistory(lorry.id, authQuery);
-      setSelectedLorryHistory(latest);
+    try {
+      await api.updateLorryStatus(lorry.id, !lorry.is_active, authQuery);
+      if (selectedLorryHistory?.lorry_id === lorry.id) {
+        const latest = await api.getLorryHistory(lorry.id, authQuery);
+        setSelectedLorryHistory(latest);
+      }
+      await loadData();
+      showToast(
+        lorry.is_active
+          ? language === "te"
+            ? `${lorry.vehicle_number} నిలిపివేయబడింది.`
+            : `${lorry.vehicle_number} disabled.`
+          : language === "te"
+            ? `${lorry.vehicle_number} యాక్టివ్ చేయబడింది.`
+            : `${lorry.vehicle_number} enabled.`,
+        "success"
+      );
+    } catch (error) {
+      showToast(
+        parseApiDetail(error, language === "te" ? "లారీ స్థితి మార్చడం విఫలమైంది." : "Failed to update lorry status."),
+        "error"
+      );
     }
-    await loadData();
   }
 
   async function openDriverDetail(driver) {
@@ -661,6 +773,9 @@ export default function App() {
         },
         authQuery
       );
+      if (createdTrip?.id) {
+        setTrips((prev) => upsertFleetItem(prev, createdTrip));
+      }
       setNewTrip({
         ...initialTrip,
         driver_id: authUser?.role === "driver" ? String(authUser.driver_id || "") : ""
@@ -682,8 +797,20 @@ export default function App() {
   }
 
   async function updateTrip(tripId, payload) {
-    await api.updateTrip(tripId, payload, authQuery);
-    await loadData();
+    try {
+      await api.updateTrip(tripId, payload, authQuery);
+      await loadData();
+      showToast(
+        language === "te" ? "ట్రిప్ అప్డేట్ అయింది." : "Trip updated successfully.",
+        "success"
+      );
+    } catch (error) {
+      showToast(
+        parseApiDetail(error, language === "te" ? "ట్రిప్ అప్డేట్ విఫలమైంది." : "Failed to update trip."),
+        "error"
+      );
+      throw error;
+    }
   }
 
   async function loginAsUser(targetIdentifier) {
@@ -700,6 +827,10 @@ export default function App() {
       const existingProfile = await api.getUserProfile(userSession.identifier);
       setProfile(existingProfile);
       setActivePage("Dashboard");
+      showToast(
+        language === "te" ? `${userSession.identifier} గా లాగిన్ అయ్యారు.` : `Logged in as ${userSession.identifier}.`,
+        "success"
+      );
     } catch (error) {
       showToast(error.message || "Could not login as user", "error");
     }
@@ -714,49 +845,88 @@ export default function App() {
     localStorage.removeItem("fleet_admin_backup");
     setProfile(null);
     setActivePage("Dashboard");
+    showToast(language === "te" ? "అడ్మిన్ వీక్షణకు తిరిగి వచ్చారు." : "Back to admin view.", "success");
   }
 
   async function assignDriverToLorry() {
     if (authUser?.role !== "user") return;
     if (!assignmentForm.driver_id || !assignmentForm.lorry_id) return;
-    await api.createDriverAssignment(
-      {
-        driver_id: Number(assignmentForm.driver_id),
-        lorry_id: Number(assignmentForm.lorry_id),
-        assigned_at: assignmentForm.assigned_at || null,
-        daily_wage: Number(assignmentForm.daily_wage || 0),
-        commission_percent: Number(assignmentForm.commission_percent || 0),
-        notes: assignmentForm.notes || null
-      },
-      authQuery
-    );
-    setAssignmentForm({
-      lorry_id: "",
-      driver_id: "",
-      assigned_at: "",
-      daily_wage: "",
-      commission_percent: "6",
-      notes: ""
-    });
-    await loadData();
+    try {
+      await api.createDriverAssignment(
+        {
+          driver_id: Number(assignmentForm.driver_id),
+          lorry_id: Number(assignmentForm.lorry_id),
+          assigned_at: assignmentForm.assigned_at || null,
+          daily_wage: Number(assignmentForm.daily_wage || 0),
+          commission_percent: Number(assignmentForm.commission_percent || 0),
+          notes: assignmentForm.notes || null
+        },
+        authQuery
+      );
+      setAssignmentForm({
+        lorry_id: "",
+        driver_id: "",
+        assigned_at: "",
+        daily_wage: "",
+        commission_percent: "6",
+        notes: ""
+      });
+      await loadData();
+      showToast(
+        language === "te" ? "డ్రైవర్ కేటాయింపు విజయవంతం." : "Driver assigned successfully.",
+        "success"
+      );
+    } catch (error) {
+      showToast(
+        parseApiDetail(error, language === "te" ? "కేటాయింపు విఫలమైంది." : "Failed to assign driver."),
+        "error"
+      );
+    }
   }
 
   async function completeAssignment(assignmentId, payload = {}) {
     if (authUser?.role !== "user") return;
-    await api.completeDriverAssignment(assignmentId, payload, authQuery);
-    await loadData();
+    try {
+      await api.completeDriverAssignment(assignmentId, payload, authQuery);
+      await loadData();
+      showToast(
+        language === "te" ? "కేటాయింపు పూర్తయింది." : "Assignment completed.",
+        "success"
+      );
+    } catch (error) {
+      showToast(
+        parseApiDetail(error, language === "te" ? "కేటాయింపు పూర్తి చేయడం విఫలమైంది." : "Failed to complete assignment."),
+        "error"
+      );
+    }
   }
 
   async function addAssignmentLeave(assignmentId, payload) {
     if (authUser?.role !== "user") return;
-    await api.addDriverAssignmentLeave(assignmentId, payload, authQuery);
-    await loadData();
+    try {
+      await api.addDriverAssignmentLeave(assignmentId, payload, authQuery);
+      await loadData();
+      showToast(language === "te" ? "సెలవు జోడించబడింది." : "Leave added.", "success");
+    } catch (error) {
+      showToast(
+        parseApiDetail(error, language === "te" ? "సెలవు జోడించడం విఫలమైంది." : "Failed to add leave."),
+        "error"
+      );
+    }
   }
 
   async function acceptDriverAssignment(assignmentId) {
     if (authUser?.role !== "driver") return;
-    await api.acceptDriverAssignment(assignmentId, authQuery);
-    await loadData();
+    try {
+      await api.acceptDriverAssignment(assignmentId, authQuery);
+      await loadData();
+      showToast(language === "te" ? "కేటాయింపు అంగీకరించబడింది." : "Assignment accepted.", "success");
+    } catch (error) {
+      showToast(
+        parseApiDetail(error, language === "te" ? "కేటాయింపు అంగీకరించడం విఫలమైంది." : "Failed to accept assignment."),
+        "error"
+      );
+    }
   }
 
   function redirectFromNotification(notification) {
@@ -807,7 +977,7 @@ export default function App() {
       language === "te"
         ? "అన్ని నోటిఫికేషన్లను తొలగించాలా?"
         : "Clear all notifications?";
-    if (!window.confirm(confirmMsg)) return;
+    if (!(await openConfirmDialog(confirmMsg))) return;
     try {
       await api.clearAllNotifications(authQuery);
       setShowNotifications(false);
@@ -831,8 +1001,16 @@ export default function App() {
 
   async function updateAssignment(assignmentId, payload) {
     if (authUser?.role !== "user") return;
-    await api.updateDriverAssignment(assignmentId, payload, authQuery);
-    await loadData();
+    try {
+      await api.updateDriverAssignment(assignmentId, payload, authQuery);
+      await loadData();
+      showToast(language === "te" ? "కేటాయింపు అప్డేట్ అయింది." : "Assignment updated.", "success");
+    } catch (error) {
+      showToast(
+        parseApiDetail(error, language === "te" ? "కేటాయింపు అప్డేట్ విఫలమైంది." : "Failed to update assignment."),
+        "error"
+      );
+    }
   }
 
   async function handleLogin(payload) {
@@ -893,8 +1071,14 @@ export default function App() {
       payload?.onDone?.();
       setActivePage("Dashboard");
       setActiveMobileTab("Dashboard");
-    } catch (_error) {
-      setLoginError(language === "te" ? "లాగిన్ విఫలమైంది" : "Invalid username or password");
+      showToast(
+        language === "te" ? `స్వాగతం, ${user.identifier}!` : `Welcome, ${user.identifier}!`,
+        "success"
+      );
+    } catch (error) {
+      setLoginError(
+        parseApiDetail(error, language === "te" ? "లాగిన్ విఫలమైంది" : "Invalid username or password")
+      );
     } finally {
       setIsLoggingIn(false);
     }
@@ -914,22 +1098,33 @@ export default function App() {
         password: payload.password,
         confirm_password: payload.confirm_password
       });
+      const accountType = payload?.accountType || "user";
       setLoginForm({ identifier: created.identifier, password: "" });
       setLoginError("");
-      setLoginNotice(
-        language === "te"
-          ? `అకౌంట్ సృష్టించబడింది. మీ యూజర్ ID: ${created.identifier}`
-          : `Account created. Your User ID: ${created.identifier}`
-      );
-      payload?.onDone?.();
-    } catch (error) {
-      const raw = error?.message || "";
-      try {
-        const parsed = JSON.parse(raw);
-        setLoginError(parsed?.detail || (language === "te" ? "నమోదు విఫలమైంది" : "Registration failed"));
-      } catch {
-        setLoginError(raw || (language === "te" ? "నమోదు విఫలమైంది" : "Registration failed"));
+      if (accountType === "loader") {
+        setLoginNotice(
+          language === "te"
+            ? `లోడర్ అకౌంట్ సృష్టించబడింది. లోడర్ ట్యాబ్‌లో ID: ${created.identifier} తో లాగిన్ అవ్వండి.`
+            : `Loader account created. Sign in on the Loader tab with ID: ${created.identifier}`
+        );
+      } else {
+        setLoginNotice(
+          language === "te"
+            ? `అకౌంట్ సృష్టించబడింది. మీ యూజర్ ID: ${created.identifier}`
+            : `Account created. Your User ID: ${created.identifier}`
+        );
       }
+      payload?.onDone?.();
+      showToast(
+        language === "te"
+          ? `అకౌంట్ సృష్టించబడింది: ${created.identifier}`
+          : `Account created: ${created.identifier}`,
+        "success"
+      );
+    } catch (error) {
+      setLoginError(
+        parseApiDetail(error, language === "te" ? "నమోదు విఫలమైంది" : "Registration failed")
+      );
     }
   }
 
@@ -984,6 +1179,12 @@ export default function App() {
       setProfile(saved);
       setLanguage(saved.preferred_language || profileForm.preferred_language || "en");
       setIsEditingProfile(false);
+      showToast(language === "te" ? "ప్రొఫైల్ సేవ్ అయింది." : "Profile saved.", "success");
+    } catch (error) {
+      showToast(
+        parseApiDetail(error, language === "te" ? "ప్రొఫైల్ సేవ్ విఫలమైంది." : "Failed to save profile."),
+        "error"
+      );
     } finally {
       setIsSavingProfile(false);
     }
@@ -1161,6 +1362,7 @@ export default function App() {
             onUpdateAssignment={updateAssignment}
             onSubmit={saveLorry}
             language={language}
+            compact
           />
           <CreateTripPage
             form={newTrip}
@@ -1711,26 +1913,35 @@ export default function App() {
             <p>{language === "te" ? "మొత్తం ట్రిప్స్" : "Total Trips"}: {selectedDriverHistory.total_trips}</p>
             <p>{language === "te" ? "మొత్తం పని రోజులు" : "Total Working Days"}: {selectedDriverHistory.total_working_days || 0}</p>
             <p>{language === "te" ? "మొత్తం ట్రాన్స్‌పోర్ట్ మొత్తం" : "Total Transport Amount"}: {formatMoney(language, selectedDriverHistory.total_transport_amount)}</p>
-            <p>{language === "te" ? "మొత్తం కమిషన్" : "Total Commission"}: {formatMoney(language, selectedDriverHistory.total_commission_amount)}</p>
+            <p>
+              {language === "te" ? "మొత్తం కమిషన్" : "Total Commission"}:{" "}
+              {formatMoney(language, selectedDriverHistoryDerived?.effectiveTotalCommission ?? selectedDriverHistory.total_commission_amount)}
+            </p>
             <p className="muted">{commissionRuleText(language)}</p>
-            <p>{language === "te" ? "మొత్తం సంపాదన" : "Total Earning"}: {formatMoney(language, selectedDriverHistory.total_driver_earning)}</p>
+            <p>
+              {language === "te" ? "మొత్తం సంపాదన" : "Total Earning"}:{" "}
+              {formatMoney(language, selectedDriverHistoryDerived?.effectiveTotalEarning ?? selectedDriverHistory.total_driver_earning)}
+            </p>
             <h4 style={{ margin: "12px 0 8px" }}>
               {language === "te" ? "ఇటీవలి ట్రిప్ లెడ్జర్" : "Recent Trip Ledger"}
             </h4>
             <div className="cards-list">
-              {selectedDriverHistory.trips?.map((trip) => (
+              {(selectedDriverHistoryDerived?.trips || selectedDriverHistory.trips || []).map((trip) => (
                 <div className="mini-card" key={trip.trip_id}>
                   <p>#{trip.trip_id} - {trip.route}</p>
                   <p>{language === "te" ? "లారీ" : "Lorry"}: {trip.lorry_number || trip.lorry_id}</p>
                   <p>{language === "te" ? "పని రోజులు" : "Working Days"}: {trip.working_days || 0}</p>
                   <p>{language === "te" ? "ట్రాన్స్‌పోర్ట్ మొత్తం" : "Transport Amount"}: {formatMoney(language, trip.transport_amount ?? trip.load_price)}</p>
-                  <p>{language === "te" ? "కమిషన్" : "Commission"}: {formatMoney(language, trip.commission_amount)}</p>
-                  {!trip.commission_eligible ? (
+                  <p>{language === "te" ? "కమిషన్" : "Commission"}: {formatMoney(language, trip.effective_commission_amount ?? trip.commission_amount)}</p>
+                  {!trip.effective_commission_eligible && !trip.commission_eligible ? (
                     <p className="muted" style={{ fontSize: 12 }}>
                       {commissionProgressText(selectedDriverHistory.total_transport_amount, language)}
                     </p>
                   ) : null}
-                  <p>{language === "te" ? "ట్రిప్ మొత్తం సంపాదన" : "Trip Total Earning"}: {formatMoney(language, trip.trip_total_earning ?? trip.driver_earned)}</p>
+                  <p>
+                    {language === "te" ? "ట్రిప్ మొత్తం సంపాదన" : "Trip Total Earning"}:{" "}
+                    {formatMoney(language, trip.effective_trip_total_earning ?? trip.trip_total_earning ?? trip.driver_earned)}
+                  </p>
                 </div>
               ))}
             </div>
@@ -1860,6 +2071,37 @@ export default function App() {
     </div>
   ) : null;
 
+  const confirmModal = confirmDialog ? (
+    <div
+      className="confirm-modal-overlay"
+      role="button"
+      tabIndex={0}
+      onClick={() => closeConfirmDialog(false)}
+      onKeyDown={(event) => {
+        if (event.key === "Escape") closeConfirmDialog(false);
+      }}
+    >
+      <section
+        className="confirm-modal"
+        role="dialog"
+        aria-modal="true"
+        aria-label={language === "te" ? "నిర్ధారణ" : "Confirmation"}
+        onClick={(event) => event.stopPropagation()}
+      >
+        <h3>{language === "te" ? "నిర్ధారణ" : "Confirm action"}</h3>
+        <p>{confirmDialog.message}</p>
+        <div className="confirm-modal-actions">
+          <button type="button" className="ghost" onClick={() => closeConfirmDialog(false)}>
+            {language === "te" ? "రద్దు" : "Cancel"}
+          </button>
+          <button type="button" onClick={() => closeConfirmDialog(true)}>
+            {language === "te" ? "సరే" : "Confirm"}
+          </button>
+        </div>
+      </section>
+    </div>
+  ) : null;
+
   if (isMobile) {
     return (
       <>
@@ -1902,6 +2144,7 @@ export default function App() {
         </div>
         {profilePanel}
         {driverDetailModal}
+        {confirmModal}
       </>
     );
   }
@@ -2037,6 +2280,7 @@ export default function App() {
                 {language === "te" ? "అడ్మిన్‌కు తిరిగి" : "Back to admin"}
               </button>
             ) : null}
+            {activePage !== "Add Lorry" ? (
             <div className="workspace-metrics">
               {workspaceMetrics.map((item) => (
                 <div className="workspace-metric" key={item.label}>
@@ -2045,6 +2289,7 @@ export default function App() {
                 </div>
               ))}
             </div>
+            ) : null}
 
             <div className="top-profile-row" ref={profileMenuRef}>
               {showUserNotifications ? (
@@ -2263,6 +2508,7 @@ export default function App() {
           </button>
         </nav>
         {driverDetailModal}
+        {confirmModal}
       </main>
     </div>
   );

@@ -753,9 +753,9 @@
 
 /* ——— Forms in mobile shell ——— */
 .mobile-app-shell .mu-form-shell .panel {
-  border-radius: 20px;
-  padding: 18px;
-  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.06);
+  border-radius: 14px;
+  padding: 12px;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.05);
 }
 
 .mobile-app-shell .mu-form-shell h3 {

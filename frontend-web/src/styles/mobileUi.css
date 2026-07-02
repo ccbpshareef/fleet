@@ -334,11 +334,10 @@
 /* Reset desktop panels inside mobile shell */
 .mobile-app-shell .mu-page .panel,
 .mobile-app-shell .mu-form-shell .panel {
-  border: 1px solid var(--mu-border);
   border-radius: var(--mu-radius-md);
-  padding: var(--mu-space-md);
+  padding: 12px;
   margin: 0;
-  box-shadow: 0 4px 8px rgba(15, 23, 42, 0.06);
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.05);
   background: var(--mu-surface);
   max-width: 100%;
   min-width: 0;
@@ -384,7 +383,7 @@
 .mobile-app-shell .mu-form-shell {
   display: flex;
   flex-direction: column;
-  gap: var(--mu-space-md);
+  gap: 10px;
   width: 100%;
   max-width: 100%;
   min-width: 0;
@@ -637,4 +636,261 @@
   font-size: 13px;
   font-weight: 800;
   color: var(--mu-text);
+}
+
+/* ——— Add Lorry compact mobile ——— */
+.mobile-app-shell .mu-form-shell .fleet-ops-shell--compact {
+  gap: 8px;
+  padding: 10px;
+  border-radius: 14px;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.05);
+}
+
+.mobile-app-shell .mu-form-shell .fleet-ops-shell--compact .card {
+  padding: 10px;
+  border-radius: 12px;
+  box-shadow: none;
+}
+
+.mobile-app-shell .fleet-ops-shell--compact .fleet-header-row--compact {
+  display: block;
+  margin: 0;
+}
+
+.mobile-app-shell .fleet-stat-strip {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
+  width: 100%;
+}
+
+.mobile-app-shell .fleet-stat-mini {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 52px;
+  max-height: 52px;
+  padding: 6px 7px;
+  border-radius: 10px;
+  border: 1px solid rgba(226, 232, 240, 0.95);
+  background: #fff;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+  min-width: 0;
+  overflow: hidden;
+}
+
+.mobile-app-shell .fleet-stat-mini .fleet-stat-icon {
+  width: 22px;
+  height: 22px;
+  border-radius: 7px;
+  flex-shrink: 0;
+}
+
+.mobile-app-shell .fleet-stat-mini .fleet-stat-icon svg {
+  width: 12px;
+  height: 12px;
+}
+
+.mobile-app-shell .fleet-stat-mini-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+
+.mobile-app-shell .fleet-stat-mini-copy strong {
+  font-size: 16px;
+  line-height: 1;
+  color: #0f172a;
+}
+
+.mobile-app-shell .fleet-stat-mini-copy span {
+  font-size: 9px;
+  line-height: 1.1;
+  font-weight: 700;
+  color: #64748b;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+.mobile-app-shell .fleet-ops-shell--compact .fleet-panel-head {
+  margin-bottom: 6px;
+  gap: 6px;
+}
+
+.mobile-app-shell .fleet-ops-shell--compact .fleet-panel-head h3 {
+  font-size: 14px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.mobile-app-shell .fleet-ops-shell--compact .fleet-helper-chips {
+  display: none;
+}
+
+.mobile-app-shell .fleet-ops-shell--compact .fleet-quick-form {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.mobile-app-shell .fleet-ops-shell--compact .fleet-field-vehicle,
+.mobile-app-shell .fleet-ops-shell--compact .fleet-field-type {
+  grid-column: span 1;
+}
+
+.mobile-app-shell .fleet-ops-shell--compact .fleet-field-driver,
+.mobile-app-shell .fleet-ops-shell--compact .fleet-field-date,
+.mobile-app-shell .fleet-ops-shell--compact .fleet-save-btn {
+  grid-column: 1 / -1;
+}
+
+.mobile-app-shell .fleet-ops-shell--compact .fleet-compact-input {
+  min-height: 38px;
+  padding: 6px 10px 6px 32px;
+  font-size: 12px;
+  border-radius: 10px;
+}
+
+.mobile-app-shell .fleet-ops-shell--compact .fleet-input-icon {
+  left: 9px;
+  width: 14px;
+  height: 14px;
+}
+
+.mobile-app-shell .fleet-ops-shell--compact .fleet-input-icon svg {
+  width: 13px;
+  height: 13px;
+}
+
+.mobile-app-shell .fleet-ops-shell--compact .fleet-save-btn {
+  min-height: 38px;
+  width: 100%;
+  font-size: 12px;
+  border-radius: 10px;
+  box-shadow: 0 6px 14px rgba(37, 99, 235, 0.18);
+}
+
+.mobile-app-shell .fleet-ops-shell--compact .fleet-list-toolbar {
+  gap: 8px;
+}
+
+.mobile-app-shell .fleet-ops-shell--compact .fleet-list-title-block h3 {
+  font-size: 14px;
+  margin: 0 0 2px;
+}
+
+.mobile-app-shell .fleet-ops-shell--compact .fleet-list-title-block p {
+  font-size: 11px;
+}
+
+.mobile-app-shell .fleet-ops-shell--compact .fleet-list-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.mobile-app-shell .fleet-ops-shell--compact .fleet-summary-pill {
+  min-height: 24px;
+  padding: 3px 8px;
+  font-size: 10px;
+}
+
+.mobile-app-shell .fleet-ops-shell--compact .fleet-list-controls {
+  grid-template-columns: 1fr;
+  gap: 6px;
+  width: 100%;
+}
+
+.mobile-app-shell .fleet-ops-shell--compact .fleet-filter-select {
+  min-height: 38px;
+  font-size: 12px;
+}
+
+.mobile-app-shell .fleet-ops-shell--compact .fleet-table tr {
+  margin-bottom: 8px;
+  border-radius: 12px;
+}
+
+.mobile-app-shell .fleet-ops-shell--compact .fleet-table td {
+  grid-template-columns: minmax(88px, 34%) 1fr;
+  gap: 6px;
+  padding: 8px 10px;
+  font-size: 12px;
+}
+
+.mobile-app-shell .fleet-ops-shell--compact .fleet-table td::before {
+  font-size: 9px;
+}
+
+.mobile-app-shell .fleet-ops-shell--compact .fleet-vehicle-avatar {
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
+}
+
+.mobile-app-shell .fleet-ops-shell--compact .fleet-vehicle-avatar svg {
+  width: 15px;
+  height: 15px;
+}
+
+.mobile-app-shell .fleet-ops-shell--compact .fleet-vehicle-cell span {
+  font-size: 10px;
+}
+
+.mobile-app-shell .fleet-ops-shell--compact .fleet-row-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+  width: 100%;
+}
+
+.mobile-app-shell .fleet-ops-shell--compact .fleet-inline-btn {
+  min-width: 0;
+  min-height: 32px;
+  padding: 5px 8px;
+  font-size: 10px;
+  border-radius: 8px;
+}
+
+.mobile-app-shell .fleet-ops-shell--compact .fleet-status-pill {
+  min-height: 24px;
+  padding: 3px 8px;
+  font-size: 10px;
+}
+
+.mobile-app-shell .fleet-ops-shell--compact .fleet-status-dot {
+  width: 6px;
+  height: 6px;
+}
+
+.mobile-app-shell .fleet-ops-shell--compact .fleet-history-shell {
+  padding: 10px;
+}
+
+.mobile-app-shell .fleet-ops-shell--compact .fleet-history-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.mobile-app-shell .fleet-ops-shell--compact .detail-card {
+  padding: 8px;
+}
+
+.mobile-app-shell .fleet-ops-shell--compact .detail-card strong {
+  font-size: 14px;
+}
+
+.mobile-app-shell .mu-form-shell .fleet-ops-shell--compact + .panel {
+  margin-top: 0;
+}
+
+@media (max-width: 520px) {
+  .mobile-app-shell .fleet-stat-strip {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
 }

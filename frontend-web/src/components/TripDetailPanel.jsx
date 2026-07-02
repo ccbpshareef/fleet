@@ -75,6 +75,10 @@ export default function TripDetailPanel({
     setExpenseDraft((prev) => ({ ...prev, [key]: value }));
   }
 
+  function preventScrollNumberChange(event) {
+    event.currentTarget.blur();
+  }
+
   async function handleSave() {
     if (!canUpdate || !hasChanges) return;
     try {
@@ -217,10 +221,11 @@ export default function TripDetailPanel({
                 <input
                   type="number"
                   min="0"
-                  step="0.01"
+                  step="1"
                   className="trip-expense-input"
                   value={expenseDraft[field.key]}
                   onChange={(e) => updateExpenseField(field.key, e.target.value)}
+                  onWheel={preventScrollNumberChange}
                   placeholder="0"
                 />
               ) : (

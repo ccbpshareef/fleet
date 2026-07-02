@@ -35,6 +35,7 @@ import {
   validateDriverCreateForm
 } from "./src/utils/driverCredentials";
 import { parseApiDetail } from "./src/utils/parseApiError";
+import { asFleetList, upsertFleetItem } from "./src/utils/fleetData";
 import { roleLabel, t as translate } from "./src/utils/i18n";
 import { colors, radius, typography } from "./src/theme";
 
@@ -104,7 +105,7 @@ const tabHints = {
     te: "వ్యాపార సారాంశాలు మరియు రిపోర్ట్స్."
   }
 };
-const WEB_UI_URL = process.env.EXPO_PUBLIC_WEB_UI_URL || "http://localhost:5173";
+const WEB_UI_URL = process.env.EXPO_PUBLIC_WEB_UI_URL || "http://localhost:5000";
 const FORCE_WEB_UI = process.env.EXPO_PUBLIC_MOBILE_UI_MODE === "web";
 const LANGUAGE_STORAGE_KEY = "fleet_preferred_language";
 
@@ -208,9 +209,21 @@ function FleetWorkspaceApp() {
   const [lastDriverCreated, setLastDriverCreated] = useState(null);
   const [scopeUsers, setScopeUsers] = useState([]);
   const [selectedScopeUser, setSelectedScopeUser] = useState("");
-  const refreshInFlightRef = useRef(false);
-  const refreshQueuedRef = useRef(false);
+  const fullFetchGenerationRef = useRef(0);
+  const sliceFetchGenerationRef = useRef({
+    drivers: 0,
+    lorries: 0,
+    trips: 0,
+    expenses: 0,
+    assignments: 0
+  });
   const assignmentsLoadedRef = useRef(false);
+
+  function invalidateSliceFetches() {
+    Object.keys(sliceFetchGenerationRef.current).forEach((key) => {
+      sliceFetchGenerationRef.current[key] += 1;
+    });
+  }
 
   const authQuery = useMemo(() => {
     if (!authUser) return null;
@@ -288,39 +301,40 @@ function FleetWorkspaceApp() {
     async ({ includeAssignments = false } = {}) => {
       if (!authQuery) return;
 
-      if (refreshInFlightRef.current) {
-        refreshQueuedRef.current = true;
+      const generation = ++fullFetchGenerationRef.current;
+      invalidateSliceFetches();
+
+      const query = authQuery;
+      const includeAssignmentData =
+        includeAssignments && (authUser?.role === "user" || authUser?.role === "driver");
+
+      const [driversRes, lorriesRes, tripsRes, expensesRes, assignmentsRes] = await Promise.allSettled([
+        api.getDrivers(query),
+        api.getLorries(query),
+        api.getTrips(query),
+        api.getExpenses(query),
+        includeAssignmentData ? api.getDriverAssignments(query) : Promise.resolve(null)
+      ]);
+
+      if (generation !== fullFetchGenerationRef.current) {
         return;
       }
 
-      refreshInFlightRef.current = true;
-      try {
-        const corePromise = Promise.all([
-          api.getDrivers(authQuery),
-          api.getLorries(authQuery),
-          api.getTrips(authQuery),
-          api.getExpenses(authQuery)
-        ]);
-        const assignmentsPromise =
-          includeAssignments && (authUser?.role === "user" || authUser?.role === "driver")
-            ? api.getDriverAssignments(authQuery)
-            : Promise.resolve(null);
-
-        const [[dr, lo, tr, ex], asg] = await Promise.all([corePromise, assignmentsPromise]);
-        setDrivers(dr);
-        setLorries(lo);
-        setTrips(tr);
-        setExpenses(ex);
-        if (asg) {
-          setDriverAssignments(asg);
-          assignmentsLoadedRef.current = true;
-        }
-      } finally {
-        refreshInFlightRef.current = false;
-        if (refreshQueuedRef.current) {
-          refreshQueuedRef.current = false;
-          refresh({ includeAssignments }).catch(console.error);
-        }
+      if (driversRes.status === "fulfilled") {
+        setDrivers(asFleetList(driversRes.value));
+      }
+      if (lorriesRes.status === "fulfilled") {
+        setLorries(asFleetList(lorriesRes.value));
+      }
+      if (tripsRes.status === "fulfilled") {
+        setTrips(asFleetList(tripsRes.value));
+      }
+      if (expensesRes.status === "fulfilled") {
+        setExpenses(asFleetList(expensesRes.value));
+      }
+      if (includeAssignmentData && assignmentsRes.status === "fulfilled") {
+        setDriverAssignments(asFleetList(assignmentsRes.value));
+        assignmentsLoadedRef.current = true;
       }
     },
     [authQuery, authUser?.role]
@@ -328,28 +342,60 @@ function FleetWorkspaceApp() {
 
   const refreshTripsAndExpenses = useCallback(async () => {
     if (!authQuery) return;
-    const [tr, ex] = await Promise.all([api.getTrips(authQuery), api.getExpenses(authQuery)]);
-    setTrips(tr);
-    setExpenses(ex);
+    const tripsGeneration = ++sliceFetchGenerationRef.current.trips;
+    const expensesGeneration = ++sliceFetchGenerationRef.current.expenses;
+    const [tripsRes, expensesRes] = await Promise.allSettled([
+      api.getTrips(authQuery),
+      api.getExpenses(authQuery)
+    ]);
+    if (tripsRes.status === "fulfilled" && tripsGeneration === sliceFetchGenerationRef.current.trips) {
+      setTrips(asFleetList(tripsRes.value));
+    }
+    if (
+      expensesRes.status === "fulfilled" &&
+      expensesGeneration === sliceFetchGenerationRef.current.expenses
+    ) {
+      setExpenses(asFleetList(expensesRes.value));
+    }
   }, [authQuery]);
 
   const refreshDriversAndAssignments = useCallback(async () => {
     if (!authQuery) return;
+    const driversGeneration = ++sliceFetchGenerationRef.current.drivers;
+    const includeAssignments = authUser?.role === "user" || authUser?.role === "driver";
+    const assignmentsGeneration = includeAssignments
+      ? ++sliceFetchGenerationRef.current.assignments
+      : null;
+
     const requests = [api.getDrivers(authQuery)];
-    if (authUser?.role === "user" || authUser?.role === "driver") {
+    if (includeAssignments) {
       requests.push(api.getDriverAssignments(authQuery));
     }
-    const results = await Promise.all(requests);
-    setDrivers(results[0]);
-    if (results[1]) {
-      setDriverAssignments(results[1]);
+
+    const results = await Promise.allSettled(requests);
+    if (results[0].status === "fulfilled" && driversGeneration === sliceFetchGenerationRef.current.drivers) {
+      setDrivers(asFleetList(results[0].value));
+    }
+    if (
+      includeAssignments &&
+      results[1]?.status === "fulfilled" &&
+      assignmentsGeneration === sliceFetchGenerationRef.current.assignments
+    ) {
+      setDriverAssignments(asFleetList(results[1].value));
       assignmentsLoadedRef.current = true;
     }
   }, [authQuery, authUser?.role]);
 
   const refreshLorries = useCallback(async () => {
     if (!authQuery) return;
-    setLorries(await api.getLorries(authQuery));
+    const generation = ++sliceFetchGenerationRef.current.lorries;
+    const lorriesRes = await Promise.allSettled([api.getLorries(authQuery)]);
+    if (
+      lorriesRes[0].status === "fulfilled" &&
+      generation === sliceFetchGenerationRef.current.lorries
+    ) {
+      setLorries(asFleetList(lorriesRes[0].value));
+    }
   }, [authQuery]);
 
   const expenseTotalsByTrip = useMemo(() => buildExpenseTotalsByTrip(expenses), [expenses]);
@@ -448,22 +494,13 @@ function FleetWorkspaceApp() {
   }, [authUser, selectedScopeUser, refresh]);
 
   useEffect(() => {
-    if (!authUser || authUser.role !== "user" || !authQuery) {
-      setNotifications([]);
-      return;
-    }
-    loadNotifications().catch(() => {});
+    // Notifications API disabled for now.
+    setNotifications([]);
   }, [authUser, authQuery]);
 
   useEffect(() => {
-    const canLoadNotifications =
-      !!authQuery &&
-      (authUser?.role === "user" || (authUser?.role === "admin" && authQuery?.scope_user));
-    if (!canLoadNotifications) return;
-    const intervalId = setInterval(() => {
-      loadNotifications().catch(() => {});
-    }, 10000);
-    return () => clearInterval(intervalId);
+    // Notifications polling disabled for now.
+    return () => {};
   }, [authUser?.role, authQuery?.viewer, authQuery?.scope_user]);
 
   useEffect(() => {
@@ -507,6 +544,10 @@ function FleetWorkspaceApp() {
       unloading_date: tripForm.unloading_date || null,
       load_price: Number(tripForm.load_price)
     }, authQuery);
+
+    if (createdTrip?.id) {
+      setTrips((prev) => upsertFleetItem(prev, createdTrip));
+    }
 
     await api.createExpense({
       trip_id: Number(createdTrip.id),
@@ -554,13 +595,24 @@ function FleetWorkspaceApp() {
 
   async function saveLorry() {
     if (authUser?.role !== "user") return;
-    await api.createLorry({
-      vehicle_number: lorryForm.vehicle_number,
+    const vehicleNumber = (lorryForm.vehicle_number || "").trim().toUpperCase();
+    if (!vehicleNumber) {
+      Alert.alert(
+        language === "te" ? "అవసరం" : "Required",
+        language === "te" ? "వాహన నంబర్ అవసరం." : "Vehicle number is required."
+      );
+      return;
+    }
+    const created = await api.createLorry({
+      vehicle_number: vehicleNumber,
       current_location: "",
       driver_id: lorryForm.driver_id
     }, authQuery);
+    if (created?.id) {
+      setLorries((prev) => upsertFleetItem(prev, created));
+    }
     setLorryForm({ vehicle_number: "", lorry_type: "Open Body", driver_id: null });
-    await Promise.all([refreshLorries(), refreshTripsAndExpenses()]);
+    await refresh({ includeAssignments: authUser.role === "user" || authUser.role === "driver" });
   }
 
   async function addDriver() {
@@ -594,6 +646,9 @@ function FleetWorkspaceApp() {
     try {
       const created = await api.createDriver(payload, authQuery);
       setLastDriverCreated(created);
+      if (created?.id) {
+        setDrivers((prev) => upsertFleetItem(prev, created));
+      }
       setDriverForm({ name: "", phone: "", license_number: "", login_identifier: "", password: "" });
       setDriverSaveError("");
       await refreshDriversAndAssignments();
@@ -899,12 +954,9 @@ function FleetWorkspaceApp() {
   }
 
   async function loadNotifications() {
-    const canLoadNotifications =
-      !!authQuery &&
-      (authUser?.role === "user" || (authUser?.role === "admin" && authQuery?.scope_user));
-    if (!canLoadNotifications) return;
-    const items = await api.getNotifications(authQuery).catch(() => []);
-    setNotifications(items || []);
+    // Notifications API is intentionally disabled for now.
+    // Re-enable api.getNotifications(authQuery) when notification module is finalized.
+    setNotifications([]);
   }
 
   async function updateTrip(tripId, payload) {

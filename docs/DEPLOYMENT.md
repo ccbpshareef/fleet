@@ -452,7 +452,7 @@ npx expo start
 | URL | Purpose |
 |-----|---------|
 | http://127.0.0.1:8000/docs | API documentation |
-| http://localhost:5173 | Web app |
+| http://localhost:5000 | Web app |
 | Expo QR code | Mobile app |
 
 ---

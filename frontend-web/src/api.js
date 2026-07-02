@@ -1,54 +1,13 @@
-const API_BASE = import.meta.env.VITE_API_BASE_URL || "/api";
+import { fleetRequest } from "./utils/fleetApiCore";
 
-function withQuery(path, query = {}) {
-  const params = new URLSearchParams();
-  Object.entries(query).forEach(([key, value]) => {
-    if (value !== undefined && value !== null && value !== "") {
-      params.set(key, String(value));
-    }
-  });
-  const queryString = params.toString();
-  return queryString ? `${path}?${queryString}` : path;
-}
+const API_BASE = (import.meta.env.VITE_API_BASE_URL || "").replace(/\/$/, "");
 
-async function request(path, options = {}) {
-  const { query, timeoutMs = 15000, ...fetchOptions } = options;
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), timeoutMs);
-
-  try {
-    const response = await fetch(`${API_BASE}${withQuery(path, query)}`, {
-      headers: { "Content-Type": "application/json" },
-      signal: controller.signal,
-      ...fetchOptions
-    });
-
-    if (!response.ok) {
-      const text = await response.text();
-      throw new Error(text || "Request failed");
-    }
-
-    if (response.status === 204) {
-      return null;
-    }
-
-    const text = await response.text();
-    if (!text) {
-      return null;
-    }
-
-    return JSON.parse(text);
-  } catch (error) {
-    if (error?.name === "AbortError") {
-      throw new Error("Request timed out. Check that the backend is running on port 8000.");
-    }
-    throw error;
-  } finally {
-    clearTimeout(timer);
-  }
+function request(path, options = {}) {
+  return fleetRequest(path, options, API_BASE);
 }
 
 export const api = {
+  health: () => request("/health"),
   login: (payload) => request("/auth/login", { method: "POST", body: JSON.stringify(payload) }),
   loginAsUser: (payload, auth) =>
     request("/auth/login-as-user", { method: "POST", body: JSON.stringify(payload), query: auth }),

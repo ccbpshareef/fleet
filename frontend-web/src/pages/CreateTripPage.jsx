@@ -160,6 +160,10 @@ export default function CreateTripPage({ form, setForm, lorries, drivers, onSubm
     setForm(nextForm);
   }
 
+  function preventScrollNumberChange(event) {
+    event.currentTarget.blur();
+  }
+
   function removeProofImage(imageId) {
     setForm({
       ...form,
@@ -289,7 +293,15 @@ export default function CreateTripPage({ form, setForm, lorries, drivers, onSubm
 
         <div className="field-stack">
           <label>{t("Load Price", "లోడ్ ధర")}</label>
-          <input className="highlight" type="number" value={form.load_price} onChange={(e) => updateField("load_price", e.target.value)} required />
+          <input
+            className="highlight"
+            type="number"
+            step="1"
+            value={form.load_price}
+            onChange={(e) => updateField("load_price", e.target.value)}
+            onWheel={preventScrollNumberChange}
+            required
+          />
         </div>
 
         <div className="field-stack">
@@ -300,6 +312,7 @@ export default function CreateTripPage({ form, setForm, lorries, drivers, onSubm
             step="0.01"
             value={form.driver_commission_percent || "6"}
             onChange={(e) => updateField("driver_commission_percent", e.target.value)}
+            onWheel={preventScrollNumberChange}
           />
           <p className="muted" style={{ margin: "4px 0 0", fontSize: 12 }}>{commissionRuleText(language)}</p>
         </div>
@@ -312,6 +325,7 @@ export default function CreateTripPage({ form, setForm, lorries, drivers, onSubm
             step="1"
             value={form.driver_daily_rate || ""}
             onChange={(e) => updateField("driver_daily_rate", e.target.value)}
+            onWheel={preventScrollNumberChange}
             placeholder={t("Example: 1000", "ఉదాహరణ: 1000")}
           />
           {form.driver_daily_rate ? (
@@ -361,8 +375,10 @@ export default function CreateTripPage({ form, setForm, lorries, drivers, onSubm
                     <input
                       type="number"
                       min="0"
+                      step="1"
                       value={form[item.amountField] || ""}
                       onChange={(event) => updateField(item.amountField, event.target.value)}
+                      onWheel={preventScrollNumberChange}
                     />
                   </div>
                   {item.imageUpload !== false ? (

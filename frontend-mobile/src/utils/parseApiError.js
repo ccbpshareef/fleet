@@ -1,18 +1,32 @@
-/** Extract human-readable message from FastAPI / fetch errors. */
-export function parseApiDetail(error, fallback = "Something went wrong") {
-  const raw = error?.message || "";
-  if (!raw) return fallback;
+/** Extract human-readable message from Fleet API / fetch errors. */
+export function formatApiErrorBody(text) {
+  if (!text) {
+    return "Request failed";
+  }
+
   try {
-    const parsed = JSON.parse(raw);
-    const detail = parsed?.detail;
-    if (typeof detail === "string") return detail;
-    if (Array.isArray(detail)) {
-      return detail
+    const parsed = JSON.parse(text);
+    if (typeof parsed?.message === "string" && parsed.message.trim()) {
+      return parsed.message.trim();
+    }
+    if (typeof parsed?.detail === "string" && parsed.detail.trim()) {
+      return parsed.detail.trim();
+    }
+    if (Array.isArray(parsed?.detail)) {
+      return parsed.detail
         .map((item) => (typeof item === "string" ? item : item?.msg || JSON.stringify(item)))
         .join(". ");
     }
-    return raw;
+    return text;
   } catch {
-    return raw || fallback;
+    return text;
   }
+}
+
+export function parseApiDetail(error, fallback = "Something went wrong") {
+  const raw = error?.message || "";
+  if (!raw) {
+    return fallback;
+  }
+  return formatApiErrorBody(raw) || fallback;
 }
