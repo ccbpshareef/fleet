@@ -889,6 +889,150 @@
   margin-top: 0;
 }
 
+.mobile-app-shell .mu-form-shell .fleet-ops-shell--compact + .panel {
+  margin-top: 0;
+}
+
+.mobile-app-shell .mu-segment-bar {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+  padding: 4px;
+  border-radius: 12px;
+  background: var(--mu-surface-soft, #f1f5f9);
+  border: 1px solid var(--mu-border, #e2e8f0);
+}
+
+.mobile-app-shell .mu-segment-btn {
+  min-height: 36px !important;
+  width: auto !important;
+  border-radius: 10px !important;
+  border: 0 !important;
+  background: transparent !important;
+  color: var(--mu-muted, #64748b) !important;
+  font-size: 12px !important;
+  font-weight: 700 !important;
+  box-shadow: none !important;
+}
+
+.mobile-app-shell .mu-segment-btn.active {
+  background: #fff !important;
+  color: var(--mu-primary, #2563eb) !important;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.08) !important;
+}
+
+.mobile-app-shell .fleet-ops-shell--compact .fleet-list-shell {
+  overflow: visible;
+}
+
+.mobile-app-shell .fleet-ops-shell--compact .fleet-table-wrap,
+.mobile-app-shell .fleet-ops-shell--compact .fleet-mobile-list {
+  max-height: none;
+  overflow: visible;
+  border: 0;
+  background: transparent;
+}
+
+.mobile-app-shell .fleet-mobile-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.mobile-app-shell .fleet-mobile-card {
+  border: 1px solid rgba(226, 232, 240, 0.95);
+  border-radius: 12px;
+  padding: 10px;
+  background: #fff;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+}
+
+.mobile-app-shell .fleet-mobile-card.selected {
+  border-color: rgba(59, 130, 246, 0.45);
+  background: linear-gradient(135deg, rgba(239, 246, 255, 0.95) 0%, rgba(255, 255, 255, 0.98) 100%);
+}
+
+.mobile-app-shell .fleet-mobile-card-main {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.mobile-app-shell .fleet-mobile-card-copy {
+  flex: 1;
+  min-width: 0;
+}
+
+.mobile-app-shell .fleet-mobile-card-copy strong {
+  display: block;
+  font-size: 14px;
+  line-height: 1.2;
+  color: #0f172a;
+}
+
+.mobile-app-shell .fleet-mobile-card-copy span {
+  display: block;
+  margin-top: 2px;
+  font-size: 11px;
+  line-height: 1.35;
+  color: #64748b;
+}
+
+.mobile-app-shell .fleet-mobile-card-actions {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.mobile-app-shell .fleet-mobile-card-actions .fleet-inline-btn {
+  width: 100%;
+  min-height: 32px !important;
+  padding: 5px 6px;
+  font-size: 10px;
+}
+
+.mobile-app-shell .fleet-mobile-card-edit {
+  display: grid;
+  gap: 6px;
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid rgba(241, 245, 249, 0.95);
+}
+
+.mobile-app-shell .fleet-mobile-card-edit-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.mobile-app-shell .fleet-quick-panel--fold {
+  padding: 0;
+  overflow: hidden;
+}
+
+.mobile-app-shell .fleet-quick-panel--fold .fleet-quick-summary {
+  list-style: none;
+  cursor: pointer;
+  padding: 10px 12px;
+  font-size: 13px;
+  font-weight: 800;
+  color: #0f172a;
+}
+
+.mobile-app-shell .fleet-quick-panel--fold .fleet-quick-summary::-webkit-details-marker {
+  display: none;
+}
+
+.mobile-app-shell .fleet-quick-panel--fold .fleet-quick-form {
+  padding: 0 10px 10px;
+}
+
+.mobile-app-shell .fleet-quick-panel--fold[open] .fleet-quick-summary {
+  border-bottom: 1px solid rgba(241, 245, 249, 0.95);
+  margin-bottom: 8px;
+}
+
 @media (max-width: 520px) {
   .mobile-app-shell .fleet-stat-strip {
     grid-template-columns: repeat(3, minmax(0, 1fr));

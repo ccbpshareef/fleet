@@ -102,6 +102,9 @@ function DatePickerField({ label, value, onChange, placeholder = "dd-mm-yyyy" })
             const iso = event.target.value || "";
             onChange(iso);
             setText(iso ? formatDisplayDate(iso) : "");
+            window.setTimeout(() => {
+              event.target.blur();
+            }, 0);
           }}
           tabIndex={-1}
           aria-hidden

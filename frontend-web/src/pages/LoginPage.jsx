@@ -383,7 +383,8 @@ export default function LoginPage({
   onForgotPassword,
   loading = false,
   error = "",
-  notice = ""
+  notice = "",
+  isMobile = false
 }) {
   const t = (en, te) => (language === "te" ? te : en);
   const [themeMode, setThemeMode] = useState("light");
@@ -499,50 +500,61 @@ export default function LoginPage({
       ? t("Enter your User ID and choose a new password.", "మీ యూజర్ ID నమోదు చేసి కొత్త పాస్‌వర్డ్ ఎంచుకోండి.")
       : t("Sign in to access your fleet workspace.", "మీ ఫ్లీట్ వర్క్‌స్పేస్‌ను యాక్సెస్ చేయడానికి సైన్ ఇన్ చేయండి.");
 
+  const themeControls = (
+    <div className="auth-page-controls" aria-label={t("Display options", "ప్రదర్శన ఎంపికలు")}>
+      <button
+        type="button"
+        className={`auth-control-btn ${themeMode === "light" ? "active" : ""}`}
+        aria-label={t("Light mode", "లైట్ మోడ్")}
+        title={t("Light mode", "లైట్ మోడ్")}
+        onClick={() => setThemeMode("light")}
+      >
+        <svg viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+          <path
+            fillRule="evenodd"
+            d="M10 3.25a.75.75 0 01.75.75v1.25a.75.75 0 01-1.5 0V4a.75.75 0 01.75-.75zm0 10a3.25 3.25 0 100-6.5 3.25 3.25 0 000 6.5zm6-3.25a.75.75 0 01.75-.75H18a.75.75 0 010 1.5h-1.25A.75.75 0 0116 10zm-6 6a.75.75 0 01.75.75V18a.75.75 0 01-1.5 0v-1.25a.75.75 0 01.75-.75zm-6-6a.75.75 0 01.75-.75H6a.75.75 0 010 1.5H4.75A.75.75 0 014 10zm9.72-4.97a.75.75 0 011.06 0l.884.884a.75.75 0 01-1.06 1.06l-.884-.884a.75.75 0 010-1.06zm-7.44 7.44a.75.75 0 011.06 0l.884.884a.75.75 0 11-1.06 1.06l-.884-.884a.75.75 0 010-1.06zm9.384 1.944a.75.75 0 010 1.06l-.884.884a.75.75 0 01-1.06-1.06l.884-.884a.75.75 0 011.06 0zM7.22 5.03a.75.75 0 010 1.06l-.884.884a.75.75 0 11-1.06-1.06l.884-.884a.75.75 0 011.06 0z"
+            clipRule="evenodd"
+          />
+        </svg>
+        {!isMobile ? <span>{t("Light", "లైట్")}</span> : null}
+      </button>
+      <button
+        type="button"
+        className={`auth-control-btn ${themeMode === "dark" ? "active" : ""}`}
+        aria-label={t("Dark mode", "డార్క్ మోడ్")}
+        title={t("Dark mode", "డార్క్ మోడ్")}
+        onClick={() => setThemeMode("dark")}
+      >
+        <svg viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+          <path d="M11.714 2.296a.75.75 0 00-.973.824 6.5 6.5 0 018.252 8.253.75.75 0 00.824-.973A8 8 0 1111.714 2.296z" />
+        </svg>
+        {!isMobile ? <span>{t("Dark", "డార్క్")}</span> : null}
+      </button>
+    </div>
+  );
+
   return (
-    <div className={`auth-page ${themeMode === "dark" ? "auth-page-dark" : ""}`}>
-      <div className="auth-page-controls" aria-label={t("Display options", "ప్రదర్శన ఎంపికలు")}>
-        <span className="auth-page-controls-label">{t("Theme", "థీమ్")}</span>
-        <button
-          type="button"
-          className={`auth-control-btn ${themeMode === "light" ? "active" : ""}`}
-          aria-label={t("Light mode", "లైట్ మోడ్")}
-          title={t("Light mode", "లైట్ మోడ్")}
-          onClick={() => setThemeMode("light")}
-        >
-          <svg viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
-            <path
-              fillRule="evenodd"
-              d="M10 3.25a.75.75 0 01.75.75v1.25a.75.75 0 01-1.5 0V4a.75.75 0 01.75-.75zm0 10a3.25 3.25 0 100-6.5 3.25 3.25 0 000 6.5zm6-3.25a.75.75 0 01.75-.75H18a.75.75 0 010 1.5h-1.25A.75.75 0 0116 10zm-6 6a.75.75 0 01.75.75V18a.75.75 0 01-1.5 0v-1.25a.75.75 0 01.75-.75zm-6-6a.75.75 0 01.75-.75H6a.75.75 0 010 1.5H4.75A.75.75 0 014 10zm9.72-4.97a.75.75 0 011.06 0l.884.884a.75.75 0 01-1.06 1.06l-.884-.884a.75.75 0 010-1.06zm-7.44 7.44a.75.75 0 011.06 0l.884.884a.75.75 0 11-1.06 1.06l-.884-.884a.75.75 0 010-1.06zm9.384 1.944a.75.75 0 010 1.06l-.884.884a.75.75 0 01-1.06-1.06l.884-.884a.75.75 0 011.06 0zM7.22 5.03a.75.75 0 010 1.06l-.884.884a.75.75 0 11-1.06-1.06l.884-.884a.75.75 0 011.06 0z"
-              clipRule="evenodd"
-            />
-          </svg>
-          <span>{t("Light", "లైట్")}</span>
-            </button>
-        <button
-          type="button"
-          className={`auth-control-btn ${themeMode === "dark" ? "active" : ""}`}
-          aria-label={t("Dark mode", "డార్క్ మోడ్")}
-          title={t("Dark mode", "డార్క్ మోడ్")}
-          onClick={() => setThemeMode("dark")}
-        >
-          <svg viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
-            <path d="M11.714 2.296a.75.75 0 00-.973.824 6.5 6.5 0 018.252 8.253.75.75 0 00.824-.973A8 8 0 1111.714 2.296z" />
-          </svg>
-          <span>{t("Dark", "డార్క్")}</span>
-          </button>
-      </div>
+    <div className={`auth-page ${themeMode === "dark" ? "auth-page-dark" : ""} ${isMobile ? "auth-page-mobile" : ""}`}>
+      {!isMobile ? (
+        <div className="auth-page-controls-wrap">
+          <span className="auth-page-controls-label">{t("Theme", "థీమ్")}</span>
+          {themeControls}
+        </div>
+      ) : null}
       <div className="auth-layout">
         <aside className="auth-hero" aria-label={t("Fleet Workspace", "ఫ్లీట్ వర్క్‌స్పేస్")}>
           <div className="auth-hero-content">
-            <div className="auth-hero-brand">
-              <div className="auth-brand-mark" aria-hidden="true">
-                FL
+            <div className="auth-hero-top">
+              <div className="auth-hero-brand">
+                <div className="auth-brand-mark" aria-hidden="true">
+                  FL
+                </div>
+                <div>
+                  <h1>{t("Fleet Workspace", "ఫ్లీట్ వర్క్‌స్పేస్")}</h1>
+                  <p>{t("Manage trips, drivers, and fleet operations with ease.", "ట్రిప్స్, డ్రైవర్లు మరియు ఫ్లీట్ ఆపరేషన్స్‌ను సులభంగా నిర్వహించండి.")}</p>
+                </div>
               </div>
-              <div>
-                <h1>{t("Fleet Workspace", "ఫ్లీట్ వర్క్‌స్పేస్")}</h1>
-                <p>{t("Manage trips, drivers, and fleet operations with ease.", "ట్రిప్స్, డ్రైవర్లు మరియు ఫ్లీట్ ఆపరేషన్స్‌ను సులభంగా నిర్వహించండి.")}</p>
-              </div>
+              {isMobile ? themeControls : null}
             </div>
             <ul className="auth-hero-features">
               {HERO_FEATURES.map((feature) => {
@@ -708,19 +720,23 @@ export default function LoginPage({
                         ) : null}
                       </button>
                     </form>
-                    <div className="auth-divider">
-                      <span>{t("or", "లేదా")}</span>
-                    </div>
-                    <button type="button" className="auth-sso-btn" disabled title={t("Coming soon", "త్వరలో")}>
-                      <svg viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
-                        <path
-                          fillRule="evenodd"
-                          d="M9.661 2.237a1.75 1.75 0 011.678 0l5.25 2.879A1.75 1.75 0 0118 6.629v5.742a7.5 7.5 0 01-3.75 6.5l-4.5 2.25a1.75 1.75 0 01-1.5 0l-4.5-2.25A7.5 7.5 0 012 12.37V6.63a1.75 1.75 0 01.961-1.513l5.25-2.88z"
-                          clipRule="evenodd"
-                        />
-                      </svg>
-                      <span>{t("Sign in with SSO", "SSO తో సైన్ ఇన్")}</span>
-                    </button>
+                    {!isMobile ? (
+                      <>
+                        <div className="auth-divider">
+                          <span>{t("or", "లేదా")}</span>
+                        </div>
+                        <button type="button" className="auth-sso-btn" disabled title={t("Coming soon", "త్వరలో")}>
+                          <svg viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+                            <path
+                              fillRule="evenodd"
+                              d="M9.661 2.237a1.75 1.75 0 011.678 0l5.25 2.879A1.75 1.75 0 0118 6.629v5.742a7.5 7.5 0 01-3.75 6.5l-4.5 2.25a1.75 1.75 0 01-1.5 0l-4.5-2.25A7.5 7.5 0 012 12.37V6.63a1.75 1.75 0 01.961-1.513l5.25-2.88z"
+                              clipRule="evenodd"
+                            />
+                          </svg>
+                          <span>{t("Sign in with SSO", "SSO తో సైన్ ఇన్")}</span>
+                        </button>
+                      </>
+                    ) : null}
                     {supportsSignup ? (
                       <p className="auth-switch-prompt">
                         {t("Need an account?", "అకౌంట్ కావాలా?")}{" "}
@@ -738,16 +754,28 @@ export default function LoginPage({
       </div>
 
       <footer className="auth-page-footer">
-        <div className="auth-page-footer-features">
-          {PAGE_FOOTER_FEATURES.map((item) => (
-            <div key={item.key} className="auth-page-footer-item">
-              <svg viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
-                {item.icon}
-              </svg>
-              <span>{language === "te" ? item.te : item.en}</span>
-            </div>
-          ))}
-        </div>
+        {!isMobile ? (
+          <div className="auth-page-footer-features">
+            {PAGE_FOOTER_FEATURES.map((item) => (
+              <div key={item.key} className="auth-page-footer-item">
+                <svg viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+                  {item.icon}
+                </svg>
+                <span>{language === "te" ? item.te : item.en}</span>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="auth-page-footer-trust" aria-hidden="true">
+            {PAGE_FOOTER_FEATURES.map((item) => (
+              <span key={item.key} className="auth-page-footer-trust-item" title={language === "te" ? item.te : item.en}>
+                <svg viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+                  {item.icon}
+                </svg>
+              </span>
+            ))}
+          </div>
+        )}
         <div className="auth-page-footer-legal">
           <span>{t("© 2025 Fleet Workspace. All rights reserved.", "© 2025 Fleet Workspace. అన్ని హక్కులు రక్షించబడ్డాయి.")}</span>
           <span className="auth-page-footer-links">

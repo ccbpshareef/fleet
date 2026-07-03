@@ -116,12 +116,111 @@ export default function AddLorryPage({
 
   const selectedVehicleNumber = selectedLorryHistory?.vehicle_number || null;
 
-  const renderLorryRow = (lorry) => {
+  const getLorryMeta = (lorry) => {
     const activeAssignment = activeAssignmentsByLorry.get(lorry.id);
     const driverName = drivers.find((item) => item.id === (activeAssignment?.driver_id ?? lorry.driver_id))?.name || "-";
-    const isEditing = editingAssignmentId === activeAssignment?.id;
     const assignedLabel = activeAssignment?.assigned_at ? formatAssignedDate(activeAssignment.assigned_at) : "-";
-    const isActive = Boolean(lorry.is_active);
+    return {
+      activeAssignment,
+      driverName,
+      assignedLabel,
+      isActive: Boolean(lorry.is_active),
+      typeLabel: lorryTypeLabel(lorry.lorry_type || form.lorry_type, language) || "-"
+    };
+  };
+
+  const renderMobileLorryCard = (lorry) => {
+    const { activeAssignment, driverName, assignedLabel, isActive, typeLabel } = getLorryMeta(lorry);
+    const isEditing = editingAssignmentId === activeAssignment?.id;
+
+    return (
+      <article
+        key={lorry.id}
+        className={`fleet-mobile-card ${selectedVehicleNumber === lorry.vehicle_number ? "selected" : ""}`}
+        onClick={() => onSelectLorry(lorry)}
+      >
+        <div className="fleet-mobile-card-main">
+          <span className="fleet-vehicle-avatar" aria-hidden="true">
+            <FleetTruckIcon />
+          </span>
+          <div className="fleet-mobile-card-copy">
+            <strong>{lorry.vehicle_number}</strong>
+            <span>
+              {typeLabel} · {driverName}
+              {assignedLabel !== "-" ? ` · ${assignedLabel}` : ""}
+            </span>
+          </div>
+          <span className={`fleet-status-pill ${isActive ? "is-active" : "is-inactive"}`}>
+            <span className="fleet-status-dot" aria-hidden="true" />
+            {isActive ? t("Active", "యాక్టివ్") : t("Inactive", "ఇనాక్టివ్")}
+          </span>
+        </div>
+        <div className="fleet-mobile-card-actions" onClick={(event) => event.stopPropagation()}>
+          {activeAssignment ? (
+            <button type="button" className="ghost fleet-inline-btn fleet-inline-btn-soft" onClick={() => startEditing(activeAssignment)}>
+              {t("Edit", "ఎడిట్")}
+            </button>
+          ) : null}
+          <button
+            type="button"
+            className="ghost fleet-inline-btn fleet-inline-btn-alert"
+            onClick={() => onToggleLorryStatus(lorry)}
+          >
+            {isActive ? t("Disable", "డిసేబుల్") : t("Enable", "ఎనేబుల్")}
+          </button>
+          <button
+            type="button"
+            className="ghost fleet-inline-btn fleet-inline-btn-danger"
+            onClick={() => onDeleteLorry(lorry)}
+          >
+            <FleetTrashIcon />
+            {t("Delete", "తొలగించు")}
+          </button>
+        </div>
+        {isEditing ? (
+          <div className="fleet-mobile-card-edit" onClick={(event) => event.stopPropagation()}>
+            <select
+              className="fleet-compact-input"
+              value={editingAssignment.driver_id}
+              onChange={(e) => setEditingAssignment((current) => ({ ...current, driver_id: e.target.value }))}
+            >
+              <option value="">{t("Select Driver", "డ్రైవర్ ఎంచుకోండి")}</option>
+              {drivers.map((driver) => (
+                <option key={driver.id} value={driver.id}>
+                  {driver.name}
+                </option>
+              ))}
+            </select>
+            <input
+              className="fleet-compact-input"
+              type="date"
+              value={editingAssignment.assigned_at}
+              onChange={(e) => setEditingAssignment((current) => ({ ...current, assigned_at: e.target.value }))}
+            />
+            <div className="fleet-mobile-card-edit-actions">
+              <button type="button" className="fleet-inline-btn" onClick={saveAssignmentEdit}>
+                {t("Save", "సేవ్")}
+              </button>
+              <button
+                type="button"
+                className="ghost fleet-inline-btn"
+                onClick={() => {
+                  setEditingAssignmentId(null);
+                  setEditingAssignment({ driver_id: "", assigned_at: "" });
+                }}
+              >
+                {t("Cancel", "రద్దు")}
+              </button>
+            </div>
+          </div>
+        ) : null}
+      </article>
+    );
+  };
+
+  const renderLorryRow = (lorry) => {
+    const { activeAssignment, driverName, assignedLabel, isActive } = getLorryMeta(lorry);
+    const isEditing = editingAssignmentId === activeAssignment?.id;
 
     return (
       <Fragment key={lorry.id}>
@@ -260,22 +359,10 @@ export default function AddLorryPage({
           </div>
         ) : null}
 
-        <div className={compact ? "fleet-stat-strip" : "fleet-stats-grid"}>
+        {!compact ? (
+          <div className="fleet-stats-grid">
           {statItems.map((item) => {
             const Icon = item.icon;
-            if (compact) {
-              return (
-                <div className="fleet-stat-mini" key={item.key}>
-                  <span className={`fleet-stat-icon fleet-stat-icon-${item.tone}`} aria-hidden="true">
-                    <Icon />
-                  </span>
-                  <div className="fleet-stat-mini-copy">
-                    <strong>{item.value}</strong>
-                    <span>{item.label}</span>
-                  </div>
-                </div>
-              );
-            }
             return (
               <div className="fleet-stat-card" key={item.key}>
                 <div>
@@ -289,8 +376,63 @@ export default function AddLorryPage({
             );
           })}
         </div>
+        ) : null}
       </div>
 
+      {compact ? (
+        <details className="card fleet-quick-panel fleet-quick-panel--fold">
+          <summary className="fleet-quick-summary">{t("Quick Add", "త్వరగా చేర్చు")}</summary>
+          <form className="fleet-quick-form" onSubmit={onSubmit}>
+            <FleetInputField icon={FleetPlateIcon} className="fleet-field-vehicle">
+              <input
+                className="fleet-compact-input"
+                placeholder={t("Vehicle Number", "వాహన నంబర్")}
+                value={form.vehicle_number}
+                onChange={(e) => setForm({ ...form, vehicle_number: e.target.value })}
+                required
+              />
+            </FleetInputField>
+            <FleetInputField icon={FleetTruckIcon} className="fleet-field-type">
+              <select
+                className="fleet-compact-input"
+                value={form.lorry_type}
+                onChange={(e) => setForm({ ...form, lorry_type: e.target.value })}
+              >
+                {types.map((type) => (
+                  <option key={type} value={type}>
+                    {lorryTypeLabel(type, language)}
+                  </option>
+                ))}
+              </select>
+            </FleetInputField>
+            <FleetInputField icon={FleetUserIcon} className="fleet-field-driver">
+              <select
+                className="fleet-compact-input"
+                value={form.driver_id}
+                onChange={(e) => setForm({ ...form, driver_id: e.target.value })}
+              >
+                <option value="">{t("Assign Driver", "డ్రైవర్ కేటాయించు")}</option>
+                {drivers.map((driver) => (
+                  <option value={driver.id} key={driver.id}>
+                    {driver.name}
+                  </option>
+                ))}
+              </select>
+            </FleetInputField>
+            <FleetInputField icon={FleetCalendarIcon} className="fleet-field-date">
+              <input
+                className="fleet-compact-input"
+                type="date"
+                value={form.assigned_at ? String(form.assigned_at).slice(0, 10) : ""}
+                onChange={(e) => setForm({ ...form, assigned_at: e.target.value })}
+              />
+            </FleetInputField>
+            <button type="submit" className="fleet-save-btn">
+              {t("Save", "సేవ్")}
+            </button>
+          </form>
+        </details>
+      ) : (
       <div className="card fleet-quick-panel">
         <div className="fleet-panel-head">
           <div>
@@ -356,6 +498,7 @@ export default function AddLorryPage({
           </button>
         </form>
       </div>
+      )}
 
       <div className="card fleet-list-shell">
         <div className="fleet-list-toolbar">
@@ -399,6 +542,14 @@ export default function AddLorryPage({
           </div>
         </div>
 
+        {compact ? (
+          <div className="fleet-mobile-list">
+            {filteredLorries.map(renderMobileLorryCard)}
+            {!filteredLorries.length ? (
+              <p className="fleet-empty-state muted">{t("No lorries matched your search.", "మీ శోధనకు సరిపోయే లారీలు లేవు.")}</p>
+            ) : null}
+          </div>
+        ) : (
         <div className="fleet-table-wrap">
           <table className="data-table fleet-table">
             <thead>
@@ -416,6 +567,7 @@ export default function AddLorryPage({
             <p className="fleet-empty-state muted">{t("No lorries matched your search.", "మీ శోధనకు సరిపోయే లారీలు లేవు.")}</p>
           ) : null}
         </div>
+        )}
       </div>
 
       {selectedLorryHistory ? (

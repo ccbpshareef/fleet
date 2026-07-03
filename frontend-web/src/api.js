@@ -1,6 +1,9 @@
 import { fleetRequest } from "./utils/fleetApiCore";
 
-const API_BASE = (import.meta.env.VITE_API_BASE_URL || "").replace(/\/$/, "");
+const API_BASE = (
+  import.meta.env.VITE_API_BASE_URL ??
+  (import.meta.env.PROD ? "https://openai.dev.jobsnprofiles.com/reports-data/fleet" : "")
+).replace(/\/$/, "");
 
 function request(path, options = {}) {
   return fleetRequest(path, options, API_BASE);

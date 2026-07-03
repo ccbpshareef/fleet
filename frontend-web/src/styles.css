@@ -3874,6 +3874,11 @@ button:disabled {
     overflow: visible;
   }
 
+  .mobile-app-shell .fleet-table-wrap {
+    max-height: none;
+    overflow: visible;
+  }
+
   .dashboard-hero-actions button,
   .login-pill-btn,
   .status-update-bar button,
@@ -3889,10 +3894,6 @@ button:disabled {
 
   .trip-card-grid {
     grid-template-columns: 1fr;
-  }
-
-  .fleet-table-wrap {
-    max-height: 420px;
   }
 }
 

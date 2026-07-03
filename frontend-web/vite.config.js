@@ -3,7 +3,7 @@ import react from "@vitejs/plugin-react";
 
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), "");
-  const proxyTarget = env.VITE_PROXY_TARGET || "http://127.0.0.1:5000";
+  const proxyTarget = env.VITE_PROXY_TARGET || "https://openai.dev.jobsnprofiles.com";
   const proxyPath = env.VITE_PROXY_PATH || "/reports-data/fleet";
 
   return {
@@ -19,7 +19,7 @@ export default defineConfig(({ mode }) => {
         "/reports-data/fleet": {
           target: proxyTarget,
           changeOrigin: true,
-          secure: false
+          secure: true
         }
       }
     }

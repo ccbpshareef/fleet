@@ -293,6 +293,7 @@ export default function App() {
   const [selectedScopeUser, setSelectedScopeUser] = useState("");
   const [activeMobileTab, setActiveMobileTab] = useState("Dashboard");
   const [mobileMoreSubview, setMobileMoreSubview] = useState(null);
+  const [mobileAddMode, setMobileAddMode] = useState("fleet");
   const [periodFilter, setPeriodFilter] = useState("complete");
   const [driverFilterId, setDriverFilterId] = useState("");
   const [fleetSearch, setFleetSearch] = useState("");
@@ -1372,29 +1373,52 @@ export default function App() {
       }
       return (
         <div className="mu-form-shell">
-          <AddLorryPage
-            form={newLorry}
-            setForm={setNewLorry}
-            drivers={drivers}
-            lorries={lorries}
-            assignments={driverAssignments}
-            selectedLorryHistory={selectedLorryHistory}
-            onSelectLorry={openLorryHistory}
-            onToggleLorryStatus={toggleLorryStatus}
-            onDeleteLorry={deleteLorry}
-            onUpdateAssignment={updateAssignment}
-            onSubmit={saveLorry}
-            language={language}
-            compact
-          />
-          <CreateTripPage
-            form={newTrip}
-            setForm={setNewTrip}
-            lorries={lorries}
-            drivers={drivers}
-            onSubmit={saveTrip}
-            language={language}
-          />
+          <div className="mu-segment-bar" role="tablist" aria-label={language === "te" ? "కొత్త ఎంపిక" : "Add options"}>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={mobileAddMode === "fleet"}
+              className={`mu-segment-btn ${mobileAddMode === "fleet" ? "active" : ""}`}
+              onClick={() => setMobileAddMode("fleet")}
+            >
+              {language === "te" ? "లారీలు" : "Fleet"}
+            </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={mobileAddMode === "trip"}
+              className={`mu-segment-btn ${mobileAddMode === "trip" ? "active" : ""}`}
+              onClick={() => setMobileAddMode("trip")}
+            >
+              {language === "te" ? "కొత్త ట్రిప్" : "New Trip"}
+            </button>
+          </div>
+          {mobileAddMode === "fleet" ? (
+            <AddLorryPage
+              form={newLorry}
+              setForm={setNewLorry}
+              drivers={drivers}
+              lorries={lorries}
+              assignments={driverAssignments}
+              selectedLorryHistory={selectedLorryHistory}
+              onSelectLorry={openLorryHistory}
+              onToggleLorryStatus={toggleLorryStatus}
+              onDeleteLorry={deleteLorry}
+              onUpdateAssignment={updateAssignment}
+              onSubmit={saveLorry}
+              language={language}
+              compact
+            />
+          ) : (
+            <CreateTripPage
+              form={newTrip}
+              setForm={setNewTrip}
+              lorries={lorries}
+              drivers={drivers}
+              onSubmit={saveTrip}
+              language={language}
+            />
+          )}
         </div>
       );
     }
@@ -1669,6 +1693,11 @@ export default function App() {
 
   function goToPage(page) {
     setActivePage(page);
+    if (page === "Create Trip") {
+      setMobileAddMode("trip");
+    } else if (page === "Add Lorry") {
+      setMobileAddMode("fleet");
+    }
     if (page === "Profit") {
       setActiveMobileTab("More");
       setMobileMoreSubview("profit");
@@ -1694,6 +1723,9 @@ export default function App() {
       return;
     }
     setMobileMoreSubview(null);
+    if (tab === "Add") {
+      setMobileAddMode("fleet");
+    }
     const page = mobileTabToPage[tab];
     if (page) {
       setActivePage(page);
@@ -1872,6 +1904,7 @@ export default function App() {
           loading={isLoggingIn}
           error={loginError}
           notice={loginNotice}
+          isMobile={isMobile}
         />
       </main>
     );
@@ -2201,8 +2234,6 @@ export default function App() {
             onSearchChange={setFleetSearch}
             theme={theme}
             onThemeToggle={toggleTheme}
-            showFab={authUser?.role === "user" || authUser?.role === "driver"}
-            onFabClick={() => goToPage("Create Trip")}
             userGreeting={profileForm.full_name || profile?.full_name || authUser?.identifier}
           >
             {renderMobilePage()}

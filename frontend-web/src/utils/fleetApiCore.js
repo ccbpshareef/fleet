@@ -126,7 +126,7 @@ export async function fleetRequest(path, options = {}, apiBase = "") {
   } catch (error) {
     if (error?.name === "AbortError") {
       throw new Error(
-        "Request timed out. Check that the Fleet API is running at http://localhost:5000/reports-data/fleet"
+        "Request timed out. Check that the Fleet API is reachable at https://openai.dev.jobsnprofiles.com/reports-data/fleet"
       );
     }
     throw error;

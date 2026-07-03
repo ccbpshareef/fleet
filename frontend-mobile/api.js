@@ -1,8 +1,7 @@
-import { Platform } from "react-native";
 import { formatApiErrorBody } from "./src/utils/parseApiError";
 
 const FLEET_API_PATH = "/reports-data/fleet";
-const FLEET_API_PORT = 5000;
+const DEFAULT_API_BASE = "https://openai.dev.jobsnprofiles.com/reports-data/fleet";
 
 function withFleetPrefix(path) {
   if (!path) {
@@ -20,16 +19,7 @@ function resolveApiBase() {
     return envBase.replace(/\/$/, "");
   }
 
-  if (Platform.OS === "web") {
-    const host = typeof window !== "undefined" ? window.location.hostname : "localhost";
-    return `http://${host}:${FLEET_API_PORT}`;
-  }
-
-  if (Platform.OS === "android") {
-    return `http://10.0.2.2:${FLEET_API_PORT}`;
-  }
-
-  return `http://127.0.0.1:${FLEET_API_PORT}`;
+  return DEFAULT_API_BASE;
 }
 
 const API_BASE = resolveApiBase();
@@ -114,7 +104,7 @@ async function request(path, options = {}) {
     } catch (error) {
       if (error?.name === "AbortError") {
         throw new Error(
-          "Request timed out. Check that the Fleet API is running at http://localhost:5000/reports-data/fleet"
+          "Request timed out. Check that the Fleet API is reachable at https://openai.dev.jobsnprofiles.com/reports-data/fleet"
         );
       }
       throw error;
