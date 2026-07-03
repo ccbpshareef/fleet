@@ -368,6 +368,9 @@
 .auth-input-icon {
   position: absolute;
   left: 14px;
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 1;
   display: grid;
   place-items: center;
   color: #94a3b8;
@@ -423,6 +426,11 @@
 }
 
 .auth-input-wrap:has(.auth-input-trailing) input {
+  padding-right: 44px;
+}
+
+.auth-input-wrap:has(.auth-input-icon):has(.auth-input-trailing) input {
+  padding-left: 44px;
   padding-right: 44px;
 }
 
@@ -989,9 +997,25 @@
   .auth-form input:not([type="checkbox"]),
   .auth-subpanel input:not([type="checkbox"]) {
     min-height: 46px;
-    padding: 10px 12px;
+    padding-top: 10px;
+    padding-bottom: 10px;
+    padding-right: 12px;
+    padding-left: 12px;
     border-radius: 12px;
     font-size: 16px;
+  }
+
+  .auth-page .auth-input-wrap:has(.auth-input-icon) input {
+    padding-left: 44px;
+  }
+
+  .auth-page .auth-input-wrap:has(.auth-input-trailing) input {
+    padding-right: 44px;
+  }
+
+  .auth-page .auth-input-wrap:has(.auth-input-icon):has(.auth-input-trailing) input {
+    padding-left: 44px;
+    padding-right: 44px;
   }
 
   .auth-form-options {
