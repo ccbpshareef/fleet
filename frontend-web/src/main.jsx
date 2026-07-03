@@ -7,6 +7,7 @@ import "./styles/mobileUi.css";
 import "./styles/ui-refresh.css";
 import "./styles/mobile-premium.css";
 import "./styles/login.css";
+import "./styles/fleetflow.css";
 
 ReactDOM.createRoot(document.getElementById("root")).render(
   <React.StrictMode>

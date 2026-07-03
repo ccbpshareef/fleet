@@ -2,6 +2,9 @@ import { useMemo, useState } from "react";
 import { TRIP_STATUSES, tripStatusLabel } from "../../utils/fleetLabels";
 import { computeDriverEarningsSummary, computeAssignmentPaySummary, formatAssignmentPeriod, driverNeedsAssignmentAccept, getDriverActiveAssignment } from "../../utils/driverEarnings";
 import { getPeriodLabel } from "../../utils/periodFilter";
+import DonutChart from "../../components/fleetflow/DonutChart";
+import { DashboardSkeleton } from "../../components/fleetflow/Skeleton";
+import StatusChip from "../../components/fleetflow/StatusChip";
 import MobileHeroBanner from "../../components/mobile/MobileHeroBanner";
 import MobileTripDetailPanel from "../../components/mobile/MobileTripDetailPanel";
 import MobileTripListRow from "../../components/mobile/MobileTripListRow";
@@ -22,13 +25,19 @@ export default function MobileDashboardPage({
   onAcceptAssignment = async () => {},
   onUpdateTrip,
   onAddTrip,
-  onAddExpense
+  onAddExpense,
+  isLoading = false,
+  searchQuery = ""
 }) {
   const t = (en, te) => (language === "te" ? te : en);
   const periodLabel = getPeriodLabel(periodFilter, language);
   const isDriver = userRole === "driver";
-  const activeTrips = trips.filter((trip) => trip.status !== "Delivered" && trip.status !== "Trip Done");
-  const doneTrips = trips.filter((trip) => trip.status === "Delivered" || trip.status === "Trip Done");
+  const scopedTrips = useMemo(
+    () => filterTripsBySearch(trips, searchQuery, drivers, lorries),
+    [trips, searchQuery, drivers, lorries]
+  );
+  const activeTrips = scopedTrips.filter((trip) => trip.status !== "Delivered" && trip.status !== "Trip Done");
+  const doneTrips = scopedTrips.filter((trip) => trip.status === "Delivered" || trip.status === "Trip Done");
   const [selectedTripId, setSelectedTripId] = useState(null);
   const [showAllActiveTrips, setShowAllActiveTrips] = useState(false);
   const visibleActiveTrips = showAllActiveTrips ? activeTrips : activeTrips.slice(0, 5);
@@ -62,10 +71,20 @@ export default function MobileDashboardPage({
     () =>
       TRIP_STATUSES.map((status) => ({
         status,
-        count: trips.filter((trip) => trip.status === status).length
+        count: scopedTrips.filter((trip) => trip.status === status).length
       })).filter((item) => item.count > 0),
-    [trips]
+    [scopedTrips]
   );
+  const donutSegments = useMemo(
+    () =>
+      statusSummary.map((item) => ({
+        label: tripStatusLabel(item.status, language),
+        value: item.count
+      })),
+    [statusSummary, language]
+  );
+  const featuredTrip = activeTrips[0] || null;
+  const expenseBreakdown = useMemo(() => aggregateExpenseBreakdown(expenseTotalsByTrip), [expenseTotalsByTrip]);
 
   const heroStats = isDriver
     ? [
@@ -74,12 +93,20 @@ export default function MobileDashboardPage({
         { label: t("Done", "పూర్తి"), value: driverEarnings.doneTripCount }
       ]
     : [
-        { label: t("Trips", "ట్రిప్స్"), value: trips.length },
+        { label: t("Trips", "ట్రిప్స్"), value: scopedTrips.length },
         { label: t("Live", "లైవ్"), value: activeTrips.length },
         { label: t("Done", "పూర్తి"), value: doneTrips.length }
       ];
 
-  if (!trips.length && !(isDriver && (assignmentPay.periodCount > 0 || needsAccept))) {
+  if (isLoading && !isDriver) {
+    return (
+      <div className="mu-page">
+        <DashboardSkeleton />
+      </div>
+    );
+  }
+
+  if (!scopedTrips.length && !(isDriver && (assignmentPay.periodCount > 0 || needsAccept))) {
     return (
       <div className="mu-page">
         <MobileHeroBanner
@@ -93,7 +120,7 @@ export default function MobileDashboardPage({
     );
   }
 
-  const selectedTrip = trips.find((item) => item.id === selectedTripId);
+  const selectedTrip = scopedTrips.find((item) => item.id === selectedTripId);
   const selectedExpense = selectedTripId ? expenseTotalsByTrip[selectedTripId] : null;
 
   function closeTripSheet() {
@@ -235,58 +262,69 @@ export default function MobileDashboardPage({
   }
 
   return (
-    <div className="mu-page">
-      <MobileHeroBanner
-        userName={userName}
-        periodLabel={periodLabel}
-        stats={heroStats}
-        language={language}
-        subtitle={t("Fleet overview for the selected period.", "ఎంచుకున్న కాలానికి ఫ్లీట్ అవలోకనం.")}
-      />
+    <div className="mu-page ff-dashboard ff-dashboard--mobile">
+      <div className="ff-kpi-row">
+        <article className="ff-glass-card ff-kpi-card">
+          <span className="ff-kpi-label">{t("Total Trips", "మొత్తం ట్రిప్స్")}</span>
+          <div className="ff-kpi-value">{scopedTrips.length}</div>
+        </article>
+        <article className="ff-glass-card ff-kpi-card">
+          <span className="ff-kpi-label">{t("Live", "లైవ్")}</span>
+          <div className="ff-kpi-value">{activeTrips.length}</div>
+        </article>
+        <article className="ff-glass-card ff-kpi-card">
+          <span className="ff-kpi-label">{t("Drivers", "డ్రైవర్లు")}</span>
+          <div className="ff-kpi-value">{drivers.length}</div>
+        </article>
+        <article className="ff-glass-card ff-kpi-card ff-kpi-card--accent">
+          <span className="ff-kpi-label">{t("Profit", "లాభం")}</span>
+          <div className="ff-kpi-value">₹{totalProfit.toFixed(0)}</div>
+        </article>
+      </div>
 
-      {onAddTrip ? (
-        <div className="mu-action-row">
-          <button type="button" className="mu-primary-btn" onClick={onAddTrip}>
-            {t("Create Trip", "ట్రిప్ సృష్టించు")}
+      {featuredTrip ? (
+        <article className="ff-glass-card ff-active-trip-card">
+          <div className="ff-active-trip-top">
+            <div>
+              <p className="ff-kpi-label">{t("Active Trip", "యాక్టివ్ ట్రిప్")}</p>
+              <p className="ff-active-trip-route">
+                {featuredTrip.load_location} → {featuredTrip.unload_location}
+              </p>
+            </div>
+            <StatusChip status={featuredTrip.status} language={language} live />
+          </div>
+          <div className="ff-meta-grid">
+            <div className="ff-meta-item">
+              <span>{t("Driver", "డ్రైవర్")}</span>
+              <strong>{drivers.find((item) => item.id === featuredTrip.driver_id)?.name || "-"}</strong>
+            </div>
+            <div className="ff-meta-item">
+              <span>{t("Contact", "సంప్రదింపు")}</span>
+              <strong>{featuredTrip.contact_person_phone || "-"}</strong>
+            </div>
+          </div>
+          <button type="button" className="ff-btn ff-btn-primary" onClick={() => setSelectedTripId(featuredTrip.id)}>
+            {t("View Details", "వివరాలు చూడండి")}
           </button>
-          {onAddExpense ? (
-            <button type="button" className="mu-secondary-btn" onClick={onAddExpense}>
-              {t("Add Expense", "ఖర్చు చేర్చు")}
-            </button>
-          ) : null}
+        </article>
+      ) : null}
+
+      {donutSegments.length ? (
+        <div className="ff-glass-card">
+          <div className="ff-section-head">
+            <h3>{t("Trip Status Mix", "ట్రిప్ స్టేటస్ మిక్స్")}</h3>
+          </div>
+          <DonutChart segments={donutSegments} size={108} centerLabel={t("trips", "ట్రిప్స్")} />
         </div>
       ) : null}
 
-      <div className="mu-stat-grid mu-stat-grid-compact">
-        <div className="mu-stat-box">
-          <span className="mu-stat-label">{t("Lorries", "లారీలు")}</span>
-          <span className="mu-stat-value">{dashboard?.total_lorries ?? 0}</span>
-        </div>
-        <div className="mu-stat-box">
-          <span className="mu-stat-label">{t("Drivers", "డ్రైవర్లు")}</span>
-          <span className="mu-stat-value">{drivers.length}</span>
-        </div>
-        <div className="mu-stat-box">
-          <span className="mu-stat-label">{t("Income", "ఆదాయం")}</span>
-          <span className="mu-stat-value">₹{totalIncome.toFixed(0)}</span>
-        </div>
-        <div className="mu-stat-box">
-          <span className="mu-stat-label">{t("Expenses", "ఖర్చులు")}</span>
-          <span className="mu-stat-value">₹{totalExpenses.toFixed(0)}</span>
-        </div>
-        <div className="mu-stat-box">
-          <span className="mu-stat-label">{t("Profit", "లాభం")}</span>
-          <span className="mu-stat-value success">₹{totalProfit.toFixed(0)}</span>
-        </div>
-      </div>
-
-      <div className="mu-card">
-        <div className="mu-screen-head">
+      <div className="ff-glass-card">
+        <div className="ff-section-head">
           <div>
-            <h3 className="mu-screen-title">{t("Active Trips", "యాక్టివ్ ట్రిప్స్")}</h3>
-            <p className="mu-section-sub">{t("Tap a trip for details.", "వివరాల కోసం ట్రిప్‌ను ట్యాప్ చేయండి.")}</p>
+            <h3>{t("Active Trips", "యాక్టివ్ ట్రిప్స్")}</h3>
+            <p>{t("Tap a trip for details.", "వివరాల కోసం ట్యాప్ చేయండి.")}</p>
           </div>
-          <span className="mu-screen-badge">{activeTrips.length}</span>
+          <StatusChip status="On route" language={language} live />
         </div>
 
         {activeTrips.length ? (
@@ -318,6 +356,21 @@ export default function MobileDashboardPage({
         ) : null}
       </div>
 
+      <div className="ff-glass-card">
+        <div className="ff-section-head">
+          <h3>{t("Expense Breakdown", "ఖర్చు విభజన")}</h3>
+        </div>
+        <div className="ff-expense-list">
+          <div className="ff-expense-row"><span>{t("Diesel", "డీజిల్")}</span><strong>₹{expenseBreakdown.diesel.toFixed(0)}</strong></div>
+          <div className="ff-expense-row"><span>{t("Toll", "టోల్")}</span><strong>₹{expenseBreakdown.toll.toFixed(0)}</strong></div>
+          <div className="ff-expense-row"><span>{t("Other", "ఇతర")}</span><strong>₹{expenseBreakdown.other.toFixed(0)}</strong></div>
+          <div className="ff-expense-total">
+            <span>{t("Total", "మొత్తం")}</span>
+            <strong>₹{(totalExpenses || expenseBreakdown.total).toFixed(0)}</strong>
+          </div>
+        </div>
+      </div>
+
       <MobileTripSheet open={Boolean(selectedTrip)} onClose={closeTripSheet} language={language}>
         {selectedTrip ? (
           <MobileTripDetailPanel
@@ -332,24 +385,41 @@ export default function MobileDashboardPage({
           />
         ) : null}
       </MobileTripSheet>
-
-      {statusSummary.length ? (
-        <div className="mu-card">
-          <h3 className="mu-screen-title">{t("Status", "స్థితి")}</h3>
-          {statusSummary.map((item) => (
-            <div className="mu-status-line" key={item.status}>
-              <span className="mu-row-meta">{tripStatusLabel(item.status, language)}</span>
-              <div className="mu-meter">
-                <div
-                  className="mu-meter-fill"
-                  style={{ width: `${Math.max(12, (item.count / Math.max(trips.length, 1)) * 100)}%` }}
-                />
-              </div>
-              <span className="mu-status-count">{item.count}</span>
-            </div>
-          ))}
-        </div>
-      ) : null}
     </div>
   );
+}
+
+function filterTripsBySearch(trips, query, drivers, lorries) {
+  const needle = String(query || "").trim().toLowerCase();
+  if (!needle) return trips;
+  return trips.filter((trip) => {
+    const driverName = drivers.find((item) => item.id === trip.driver_id)?.name || "";
+    const lorryNumber = lorries.find((item) => item.id === trip.lorry_id)?.vehicle_number || "";
+    const haystack = [
+      trip.id,
+      trip.load_location,
+      trip.unload_location,
+      trip.load_type,
+      trip.contact_person_name,
+      trip.contact_person_phone,
+      trip.status,
+      driverName,
+      lorryNumber
+    ]
+      .filter(Boolean)
+      .join(" ")
+      .toLowerCase();
+    return haystack.includes(needle);
+  });
+}
+
+function aggregateExpenseBreakdown(expenseTotalsByTrip) {
+  const totals = { diesel: 0, toll: 0, other: 0, total: 0 };
+  Object.values(expenseTotalsByTrip || {}).forEach((item) => {
+    totals.diesel += Number(item.diesel || 0);
+    totals.toll += Number(item.toll || 0);
+    totals.other += Number(item.other || 0) + Number(item.maintenance || 0) + Number(item.driver_bata || 0);
+  });
+  totals.total = totals.diesel + totals.toll + totals.other;
+  return totals;
 }

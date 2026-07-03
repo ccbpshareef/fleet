@@ -69,8 +69,8 @@ export default function TripContactsPage({ trips, drivers, language = "en", peri
     null;
 
   return (
-    <section className="panel trip-contacts-shell">
-      <div className="trip-contacts-head">
+    <section className="panel trip-contacts-shell ff-page">
+      <div className="trip-contacts-head ff-page-header">
         <div>
           <h2>{t("Trip Contacts Directory", "ట్రిప్ కాంటాక్ట్స్ డైరెక్టరీ")}</h2>
           <p className="muted">

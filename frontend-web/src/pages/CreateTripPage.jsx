@@ -199,8 +199,8 @@ export default function CreateTripPage({ form, setForm, lorries, drivers, onSubm
   }
 
   return (
-    <section className="panel create-trip-shell">
-      <div className="create-trip-head">
+    <section className="panel create-trip-shell ff-page">
+      <div className="create-trip-head ff-page-header">
         <div>
           <h2>{t("Create Trip + Expense", "ట్రిప్ + ఖర్చు నమోదు")}</h2>
           <p className="muted">

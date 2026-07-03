@@ -5,8 +5,8 @@ export default function ReportsPage({ dashboard, trips, language = "en", periodF
   const periodLabel = getPeriodLabel(periodFilter, language);
 
   return (
-    <section className="panel reports-shell">
-      <div className="reports-head">
+    <section className="panel reports-shell ff-page">
+      <div className="reports-head ff-page-header">
         <div>
           <h2>{t("Reports", "\u0c30\u0c3f\u0c2a\u0c4b\u0c30\u0c4d\u0c1f\u0c4d\u0c38\u0c4d")}</h2>
           <p className="muted reports-subtitle">

@@ -1,4 +1,12 @@
 import NotificationBell from "./NotificationBell";
+import FleetSearchBar from "./fleetflow/FleetSearchBar";
+
+function getGreeting(language = "en") {
+  const hour = new Date().getHours();
+  if (hour < 12) return language === "te" ? "శుభోదయం" : "Good morning";
+  if (hour < 17) return language === "te" ? "శుభ మధ్యాహ్నం" : "Good afternoon";
+  return language === "te" ? "శుభ సాయంత్రం" : "Good evening";
+}
 
 export default function MobileWorkspace({
   language,
@@ -29,7 +37,14 @@ export default function MobileWorkspace({
   onCloseNotifications,
   onMarkNotificationRead,
   onMarkAllNotificationsRead,
-  onClearAllNotifications
+  onClearAllNotifications,
+  searchValue = "",
+  onSearchChange = () => {},
+  theme = "light",
+  onThemeToggle = () => {},
+  showFab = false,
+  onFabClick = () => {},
+  userGreeting = ""
 }) {
   const metaLabel =
     authUser?.role === "admin"
@@ -41,11 +56,23 @@ export default function MobileWorkspace({
       <header className="m-header-wrap m-header-sticky">
         <div className="m-header-bar">
           <div className="m-header-copy">
-            <p className="m-header-kicker">{metaLabel}</p>
+            <p className="m-header-kicker">
+              {getGreeting(language)}
+              {userGreeting ? `, ${userGreeting}` : ""}
+            </p>
             <h1 className="m-header-title">{tabLabel(activeTab)}</h1>
+            <p className="m-header-date">{metaLabel}</p>
           </div>
 
           <div className="m-header-actions">
+            <button
+              type="button"
+              className="ff-theme-btn"
+              onClick={onThemeToggle}
+              aria-label={theme === "dark" ? (language === "te" ? "లైట్ మోడ్" : "Light mode") : (language === "te" ? "డార్క్ మోడ్" : "Dark mode")}
+            >
+              {theme === "dark" ? "☀" : "☾"}
+            </button>
             {showNotifications ? (
               <NotificationBell
                 notifications={notifications}
@@ -73,6 +100,14 @@ export default function MobileWorkspace({
               {profileNeedsSetup ? <span className="profile-incomplete-dot" aria-hidden="true" /> : null}
             </button>
           </div>
+        </div>
+
+        <div className="m-search-wrap">
+          <FleetSearchBar
+            value={searchValue}
+            onChange={onSearchChange}
+            placeholder={language === "te" ? "ట్రిప్, డ్రైవర్, లారీ శోధించండి…" : "Search trips, drivers, lorries…"}
+          />
         </div>
       </header>
 
@@ -111,6 +146,17 @@ export default function MobileWorkspace({
         {filters}
         <div className="m-content-stack">{children}</div>
       </div>
+
+      {showFab ? (
+        <button
+          type="button"
+          className="ff-fab"
+          onClick={onFabClick}
+          aria-label={language === "te" ? "కొత్త ట్రిప్" : "Create trip"}
+        >
+          +
+        </button>
+      ) : null}
 
       <nav className="m-bottom-nav" aria-label={language === "te" ? "మొబైల్ నావిగేషన్" : "Mobile navigation"}>
         {tabs.map((tab) => {

@@ -3,6 +3,7 @@ import { api } from "./api";
 import DriverFilterBar from "./components/DriverFilterBar";
 import NotificationBell from "./components/NotificationBell";
 import MobileWorkspace from "./components/MobileWorkspace";
+import FleetSearchBar from "./components/fleetflow/FleetSearchBar";
 import PeriodFilterBar from "./components/PeriodFilterBar";
 import { useToast } from "./components/ToastProvider";
 import useIsMobile from "./hooks/useIsMobile";
@@ -146,6 +147,7 @@ const mobileTabHints = {
   }
 };
 const LANGUAGE_STORAGE_KEY = "fleet_preferred_language";
+const THEME_STORAGE_KEY = "fleet_theme";
 
 const teluguLabels = {
   Dashboard: "డ్యాష్‌బోర్డ్",
@@ -187,6 +189,13 @@ const pageDescriptions = {
   Reports: "Scan business summaries and operational reports quickly."
 };
 
+function getGreeting(language = "en") {
+  const hour = new Date().getHours();
+  if (hour < 12) return language === "te" ? "శుభోదయం" : "Good morning";
+  if (hour < 17) return language === "te" ? "శుభ మధ్యాహ్నం" : "Good afternoon";
+  return language === "te" ? "శుభ సాయంత్రం" : "Good evening";
+}
+
 const initialTrip = {
   lorry_id: "",
   driver_id: "",
@@ -215,7 +224,8 @@ const initialTrip = {
 export default function App() {
   const showToast = useToast();
   const workspaceScrollRef = useRef(null);
-  const profileMenuRef = useRef(null);
+  const profileTriggerRef = useRef(null);
+  const profilePopoverRef = useRef(null);
   const [activePage, setActivePage] = useState("Dashboard");
   const [language, setLanguage] = useState(() => {
     if (typeof window === "undefined") return "en";
@@ -285,6 +295,12 @@ export default function App() {
   const [mobileMoreSubview, setMobileMoreSubview] = useState(null);
   const [periodFilter, setPeriodFilter] = useState("complete");
   const [driverFilterId, setDriverFilterId] = useState("");
+  const [fleetSearch, setFleetSearch] = useState("");
+  const [isDataLoading, setIsDataLoading] = useState(false);
+  const [theme, setTheme] = useState(() => {
+    if (typeof window === "undefined") return "light";
+    return window.localStorage.getItem(THEME_STORAGE_KEY) === "dark" ? "dark" : "light";
+  });
   const isMobile = useIsMobile();
   const confirmResolverRef = useRef(null);
   const dataFetchGenerationRef = useRef(0);
@@ -323,42 +339,49 @@ export default function App() {
 
     const generation = ++dataFetchGenerationRef.current;
     const query = authQuery;
+    setIsDataLoading(true);
 
-    const [dashboardRes, driversRes, lorriesRes, tripsRes, expensesRes, assignmentsRes] =
-      await Promise.allSettled([
-        api.getDashboard(query),
-        api.getDrivers(query),
-        api.getLorries(query),
-        api.getTrips(query),
-        api.getExpenses(query),
-        api.getDriverAssignments(query)
-      ]);
+    try {
+      const [dashboardRes, driversRes, lorriesRes, tripsRes, expensesRes, assignmentsRes] =
+        await Promise.allSettled([
+          api.getDashboard(query),
+          api.getDrivers(query),
+          api.getLorries(query),
+          api.getTrips(query),
+          api.getExpenses(query),
+          api.getDriverAssignments(query)
+        ]);
 
-    if (generation !== dataFetchGenerationRef.current) {
-      return;
-    }
+      if (generation !== dataFetchGenerationRef.current) {
+        return;
+      }
 
-    if (dashboardRes.status === "fulfilled" && dashboardRes.value != null) {
-      setDashboard(dashboardRes.value);
-    }
-    if (driversRes.status === "fulfilled") {
-      setDrivers(asFleetList(driversRes.value));
-    }
-    if (lorriesRes.status === "fulfilled") {
-      setLorries(asFleetList(lorriesRes.value));
-    }
-    if (tripsRes.status === "fulfilled") {
-      setTrips(asFleetList(tripsRes.value));
-    }
-    if (expensesRes.status === "fulfilled") {
-      setExpenses(asFleetList(expensesRes.value));
-    }
-    if (assignmentsRes.status === "fulfilled") {
-      setDriverAssignments(asFleetList(assignmentsRes.value));
-    }
+      if (dashboardRes.status === "fulfilled" && dashboardRes.value != null) {
+        setDashboard(dashboardRes.value);
+      }
+      if (driversRes.status === "fulfilled") {
+        setDrivers(asFleetList(driversRes.value));
+      }
+      if (lorriesRes.status === "fulfilled") {
+        setLorries(asFleetList(lorriesRes.value));
+      }
+      if (tripsRes.status === "fulfilled") {
+        setTrips(asFleetList(tripsRes.value));
+      }
+      if (expensesRes.status === "fulfilled") {
+        setExpenses(asFleetList(expensesRes.value));
+      }
+      if (assignmentsRes.status === "fulfilled") {
+        setDriverAssignments(asFleetList(assignmentsRes.value));
+      }
 
-    // Notifications API disabled for now to avoid polling traffic.
-    setNotifications([]);
+      // Notifications API disabled for now to avoid polling traffic.
+      setNotifications([]);
+    } finally {
+      if (generation === dataFetchGenerationRef.current) {
+        setIsDataLoading(false);
+      }
+    }
   }
 
   const expenseTotalsByTrip = expenses.reduce((acc, item) => {
@@ -1393,6 +1416,8 @@ export default function App() {
         onUpdateTrip={updateTrip}
         onAddTrip={authUser?.role === "user" ? () => goToPage("Create Trip") : undefined}
         onAddExpense={authUser?.role === "user" ? () => goToPage("Create Trip") : undefined}
+        isLoading={isDataLoading}
+        searchQuery={fleetSearch}
       />
     );
   }
@@ -1499,6 +1524,7 @@ export default function App() {
           periodFilter={periodFilter}
           userRole={authUser?.role}
           onUpdateTrip={updateTrip}
+          searchQuery={fleetSearch}
         />
       );
     }
@@ -1536,6 +1562,8 @@ export default function App() {
         driverAssignments={driverAssignments}
         driverId={authUser?.driver_id}
         onAcceptAssignment={acceptDriverAssignment}
+        isLoading={isDataLoading}
+        searchQuery={fleetSearch}
       />
     );
   }
@@ -1633,6 +1661,10 @@ export default function App() {
     } catch (_error) {
       // Keep UI updated locally even if API save fails.
     }
+  }
+
+  function toggleTheme() {
+    setTheme((prev) => (prev === "dark" ? "light" : "dark"));
   }
 
   function goToPage(page) {
@@ -1791,10 +1823,10 @@ export default function App() {
     if (!showProfilePanel) return;
 
     function handlePointerDown(event) {
-      if (!profileMenuRef.current) return;
-      if (!profileMenuRef.current.contains(event.target)) {
-        setShowProfilePanel(false);
-      }
+      const target = event.target;
+      if (profileTriggerRef.current?.contains(target)) return;
+      if (profilePopoverRef.current?.contains(target)) return;
+      setShowProfilePanel(false);
     }
 
     document.addEventListener("mousedown", handlePointerDown);
@@ -1804,6 +1836,12 @@ export default function App() {
       document.removeEventListener("touchstart", handlePointerDown);
     };
   }, [showProfilePanel]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    document.documentElement.setAttribute("data-theme", theme);
+    window.localStorage.setItem(THEME_STORAGE_KEY, theme);
+  }, [theme]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -1955,13 +1993,13 @@ export default function App() {
 
   const profilePanel = showProfilePanel ? (
     <div
-      className={isMobile ? "m-profile-overlay" : undefined}
+      className={isMobile ? "m-profile-overlay" : "profile-menu-layer"}
       role="presentation"
-      onClick={isMobile ? () => setShowProfilePanel(false) : undefined}
+      onClick={() => setShowProfilePanel(false)}
     >
       <div
-        className={`top-profile-popover ${isMobile ? "m-profile-sheet" : ""}`}
-        ref={isMobile ? profileMenuRef : undefined}
+        className={`top-profile-popover profile-menu-card ${isMobile ? "m-profile-sheet" : ""}`}
+        ref={profilePopoverRef}
         onClick={(event) => event.stopPropagation()}
       >
         <div className="top-profile-head">
@@ -1989,7 +2027,7 @@ export default function App() {
         ) : null}
 
         {isEditingProfile || needsProfileSetup ? (
-          <div className="form-grid single" style={{ marginTop: 10 }}>
+          <div className="form-grid single profile-menu-form" style={{ marginTop: 10 }}>
             <input
               placeholder={language === "te" ? "పూర్తి పేరు" : "Full Name"}
               value={profileForm.full_name}
@@ -2021,7 +2059,7 @@ export default function App() {
             <input type="file" accept="image/*" onChange={handleProfileImageUpload} />
           </div>
         ) : (
-          <div className="top-profile-meta">
+          <div className="top-profile-meta profile-menu-meta">
             <p>{language === "te" ? "ఫోన్" : "Phone"}: {profile?.phone || "-"}</p>
             <p>{language === "te" ? "ఇమెయిల్" : "Email"}: {profile?.email || "-"}</p>
             {isMobile ? (
@@ -2033,40 +2071,61 @@ export default function App() {
           </div>
         )}
 
-        <div className="inline-actions" style={{ marginBottom: 0 }}>
-          {isEditingProfile || needsProfileSetup ? (
-            <>
-              <button type="button" onClick={saveProfile} disabled={isSavingProfile || !profileForm.full_name}>
-                {isSavingProfile
+        {isEditingProfile || needsProfileSetup ? (
+          <div className="profile-menu-actions">
+            <button type="button" className="profile-menu-item" onClick={saveProfile} disabled={isSavingProfile || !profileForm.full_name}>
+              {isSavingProfile
+                ? language === "te"
+                  ? "సేవ్ అవుతోంది..."
+                  : "Saving..."
+                : needsProfileSetup
                   ? language === "te"
-                    ? "సేవ్ అవుతోంది..."
-                    : "Saving..."
-                  : needsProfileSetup
-                    ? language === "te"
-                      ? "ప్రొఫైల్ సేవ్"
-                      : "Save Profile"
-                    : language === "te"
-                      ? "సేవ్ చేయి"
-                      : "Save"}
-              </button>
-              {!needsProfileSetup ? (
-                <button type="button" className="ghost" onClick={() => setIsEditingProfile(false)}>
-                  {language === "te" ? "రద్దు" : "Cancel"}
-                </button>
-              ) : null}
-            </>
-          ) : (
-            <button type="button" onClick={() => setIsEditingProfile(true)}>
-              {language === "te" ? "ప్రొఫైల్ మార్చు" : "Edit Profile"}
+                    ? "ప్రొఫైల్ సేవ్"
+                    : "Save Profile"
+                  : language === "te"
+                    ? "సేవ్ చేయి"
+                    : "Save changes"}
             </button>
-          )}
-          <button type="button" className="ghost" onClick={handleLanguageToggle}>
-            {languageToggleLabel(language)}
-          </button>
-          <button className="ghost" onClick={handleLogout}>
-            {language === "te" ? "లాగౌట్" : "Logout"}
-          </button>
-        </div>
+            {!needsProfileSetup ? (
+              <button type="button" className="profile-menu-item profile-menu-item--ghost" onClick={() => setIsEditingProfile(false)}>
+                {language === "te" ? "రద్దు" : "Cancel"}
+              </button>
+            ) : null}
+          </div>
+        ) : (
+          <>
+            <div className="profile-menu-divider" />
+            <div className="profile-menu-list">
+              <button type="button" className="profile-menu-item" onClick={() => setIsEditingProfile(true)}>
+                <span className="profile-menu-item-icon" aria-hidden="true">✎</span>
+                <span>{language === "te" ? "ప్రొఫైల్ మార్చు" : "Edit Profile"}</span>
+              </button>
+              <button type="button" className="profile-menu-item" onClick={handleLanguageToggle}>
+                <span className="profile-menu-item-icon" aria-hidden="true">🌐</span>
+                <span>{language === "te" ? "భాష" : "Language"}</span>
+                <span className="profile-menu-item-hint">{languageToggleLabel(language)}</span>
+              </button>
+              <button type="button" className="profile-menu-item" onClick={toggleTheme}>
+                <span className="profile-menu-item-icon" aria-hidden="true">{theme === "dark" ? "☀" : "☾"}</span>
+                <span>{language === "te" ? "థీమ్" : "Theme"}</span>
+                <span className="profile-menu-item-hint">
+                  {theme === "dark"
+                    ? language === "te"
+                      ? "లైట్"
+                      : "Light"
+                    : language === "te"
+                      ? "డార్క్"
+                      : "Dark"}
+                </span>
+              </button>
+            </div>
+            <div className="profile-menu-divider" />
+            <button type="button" className="profile-menu-item profile-menu-item--danger" onClick={handleLogout}>
+              <span className="profile-menu-item-icon" aria-hidden="true">⎋</span>
+              <span>{language === "te" ? "లాగౌట్" : "Logout"}</span>
+            </button>
+          </>
+        )}
       </div>
     </div>
   ) : null;
@@ -2138,6 +2197,13 @@ export default function App() {
             onMarkNotificationRead={markNotificationRead}
             onMarkAllNotificationsRead={markAllNotificationsRead}
             onClearAllNotifications={clearAllNotifications}
+            searchValue={fleetSearch}
+            onSearchChange={setFleetSearch}
+            theme={theme}
+            onThemeToggle={toggleTheme}
+            showFab={authUser?.role === "user" || authUser?.role === "driver"}
+            onFabClick={() => goToPage("Create Trip")}
+            userGreeting={profileForm.full_name || profile?.full_name || authUser?.identifier}
           >
             {renderMobilePage()}
           </MobileWorkspace>
@@ -2151,12 +2217,12 @@ export default function App() {
 
   return (
     <div className={`layout ${isSidebarOpen ? "" : "sidebar-closed"}`}>
-      {isSidebarOpen ? <aside className="sidebar">
-        <div className="sidebar-brand">
-          <div className="brand-mark" aria-hidden="true">FL</div>
+      {isSidebarOpen ? <aside className="sidebar sidebar--dock">
+        <div className="sidebar-brand sidebar-brand--fleetflow">
+          <div className="brand-mark" aria-hidden="true">FF</div>
           <div className="brand-copy">
-            <h1>{language === "te" ? "ఫ్లీట్" : "Fleet"}</h1>
-            <p className="muted">{language === "te" ? "వర్క్‌స్పేస్" : "Workspace"}</p>
+            <h1>FleetFlow</h1>
+            <p className="brand-tagline">{language === "te" ? "స్మార్ట్‌గా కదలండి" : "Move Smart. Move Easy."}</p>
           </div>
         </div>
 
@@ -2211,234 +2277,134 @@ export default function App() {
       </aside> : null}
 
       <main className="main workspace-shell" ref={workspaceScrollRef}>
-        <div className="workspace-header">
-          <div className="workspace-header-copy">
-            {!isSidebarOpen ? (
-              <button
-                type="button"
-                className="nav-toggle-btn nav-toggle-btn-header"
-                onClick={() => setIsSidebarOpen((prev) => !prev)}
-                aria-label={language === "te" ? "\u0c28\u0c3e\u0c35\u0c3f\u0c17\u0c47\u0c37\u0c28\u0c4d \u0c24\u0c46\u0c30\u0c41\u0c35\u0c41" : "Open navigation"}
-                aria-expanded={isSidebarOpen}
-              >
-                <span />
-                <span />
-                <span />
-              </button>
-            ) : null}
-            <p className="section-kicker">{workspaceDate}</p>
-            <div className="workspace-title-row">
-              <h2>{t(activePage)}</h2>
-              <span className="workspace-tag">
-                {authUser.role === "admin"
-                  ? (selectedScopeUser
-                    ? `${language === "te" ? "యూజర్" : "User"}: ${selectedScopeUser}`
-                    : (language === "te" ? "యూజర్ ఎంచుకోండి" : "Select user"))
-                  : authUser.role === "driver"
-                    ? (language === "te" ? "డ్రైవర్ వీక్" : "Driver View")
-                    : "Operations View"}
-              </span>
-            </div>
-            <p className="workspace-subtitle">{pageDescription}</p>
-            {isMobile ? (
-              <div className="page-help-banner" role="note">
-                <span className="page-help-icon" aria-hidden="true">💡</span>
-                <div>
-                  <strong>{language === "te" ? "ఈ పేజీ లో" : "On this page"}</strong>
-                  {pageDescription}
-                </div>
-              </div>
-            ) : null}
-          </div>
-
-
-          <div className="workspace-header-actions">
-            {authUser.role === "admin" ? (
-              <div className="scope-user-picker">
-                <label htmlFor="scope-user-select">{language === "te" ? "యూజర్ డేటా" : "View user data"}</label>
-                <select
-                  id="scope-user-select"
-                  value={selectedScopeUser}
-                  onChange={(event) => setSelectedScopeUser(event.target.value)}
-                >
-                  <option value="">{language === "te" ? "యూజర్ ఎంచుకోండి" : "Select user"}</option>
-                  {scopeUsers.map((user) => (
-                    <option key={user.identifier} value={user.identifier}>
-                      {user.full_name ? `${user.full_name} (${user.identifier})` : user.identifier}
-                    </option>
-                  ))}
-                </select>
-                {selectedScopeUser ? (
-                  <button type="button" className="ghost compact-login-as-btn" onClick={() => loginAsUser(selectedScopeUser)}>
-                    {language === "te" ? "యూజర్‌గా లాగిన్" : "Login as user"}
+        <div className="workspace-header ff-workspace-toolbar">
+          <div className="ff-header-inner">
+            <div className="ff-header-row ff-header-row--top">
+              <div className="workspace-header-copy">
+                {!isSidebarOpen ? (
+                  <button
+                    type="button"
+                    className="nav-toggle-btn nav-toggle-btn-header"
+                    onClick={() => setIsSidebarOpen((prev) => !prev)}
+                    aria-label={language === "te" ? "\u0c28\u0c3e\u0c35\u0c3f\u0c17\u0c47\u0c37\u0c28\u0c4d \u0c24\u0c46\u0c30\u0c41\u0c35\u0c41" : "Open navigation"}
+                    aria-expanded={isSidebarOpen}
+                  >
+                    <span />
+                    <span />
+                    <span />
                   </button>
                 ) : null}
+                <p className="section-kicker">{getGreeting(language)}, {userDisplayName}</p>
+                <div className="workspace-title-row">
+                  <h2>{t(activePage)}</h2>
+                  <span className="workspace-tag">{workspaceDate}</span>
+                </div>
+                <p className="workspace-subtitle">{pageDescription}</p>
               </div>
-            ) : null}
-            {authUser.acting_as_admin ? (
-              <button type="button" className="ghost compact-login-as-btn" onClick={exitImpersonation}>
-                {language === "te" ? "అడ్మిన్‌కు తిరిగి" : "Back to admin"}
-              </button>
-            ) : null}
-            {activePage !== "Add Lorry" ? (
-            <div className="workspace-metrics">
-              {workspaceMetrics.map((item) => (
-                <div className="workspace-metric" key={item.label}>
-                  <span>{item.label}</span>
-                  <strong>{item.value}</strong>
-                </div>
-              ))}
-            </div>
-            ) : null}
 
-            <div className="top-profile-row" ref={profileMenuRef}>
-              {showUserNotifications ? (
-                <NotificationBell
-                  notifications={notifications}
-                  unreadCount={unreadNotificationCount}
-                  open={showNotifications}
-                  onToggle={() => {
-                    setShowNotifications((prev) => !prev);
-                    if (showProfilePanel) setShowProfilePanel(false);
+              <div className="ff-header-controls top-profile-row" ref={profileTriggerRef}>
+                {showUserNotifications ? (
+                  <NotificationBell
+                    notifications={notifications}
+                    unreadCount={unreadNotificationCount}
+                    open={showNotifications}
+                    onToggle={() => {
+                      setShowNotifications((prev) => !prev);
+                      if (showProfilePanel) setShowProfilePanel(false);
+                    }}
+                    onClose={() => setShowNotifications(false)}
+                    onMarkRead={markNotificationRead}
+                    onMarkAllRead={markAllNotificationsRead}
+                    onClearAll={clearAllNotifications}
+                    language={language}
+                  />
+                ) : null}
+                <button
+                  type="button"
+                  className={`profile-icon-btn ${needsProfileSetup ? "profile-incomplete" : ""} ${showProfilePanel ? "profile-icon-btn--active" : ""}`}
+                  onClick={() => {
+                    if (showProfilePanel) {
+                      setShowProfilePanel(false);
+                      return;
+                    }
+                    setShowNotifications(false);
+                    openProfilePanel();
                   }}
-                  onClose={() => setShowNotifications(false)}
-                  onMarkRead={markNotificationRead}
-                  onMarkAllRead={markAllNotificationsRead}
-                  onClearAll={clearAllNotifications}
-                  language={language}
-                />
-              ) : null}
-              <button
-                type="button"
-                className={`profile-icon-btn ${needsProfileSetup ? "profile-incomplete" : ""}`}
-                onClick={() => {
-                  if (showProfilePanel) {
-                    setShowProfilePanel(false);
-                    return;
+                  aria-label={
+                    needsProfileSetup
+                      ? language === "te"
+                        ? "ప్రొఫైల్ పూర్తి చేయండి"
+                        : "Complete your profile"
+                      : language === "te"
+                        ? "ప్రొఫైల్ తెరువు"
+                        : "Open profile"
                   }
-                  setShowNotifications(false);
-                  openProfilePanel();
-                }}
-                aria-label={
-                  needsProfileSetup
-                    ? language === "te"
-                      ? "ప్రొఫైల్ పూర్తి చేయండి"
-                      : "Complete your profile"
-                    : language === "te"
-                      ? "ప్రొఫైల్ తెరువు"
-                      : "Open profile"
-                }
-                aria-expanded={showProfilePanel}
-              >
-                {profileImageUrl ? (
-                  <img src={profileImageUrl} alt={userDisplayName} className="avatar-img avatar-img-btn" />
-                ) : (
-                  profileInitial
-                )}
-                {profileIncompleteDot}
-              </button>
-
-              {showProfilePanel ? (
-                <div className="top-profile-popover">
-                  <div className="top-profile-head">
-                    <div className="top-profile-logo">
-                      {profileImageUrl ? (
-                        <img src={profileImageUrl} alt={userDisplayName} className="avatar-img" />
-                      ) : (
-                        profileInitial
-                      )}
-                    </div>
-                    <div>
-                      <strong>{userDisplayName}</strong>
-                      <p className="muted" style={{ margin: "2px 0 0" }}>
-                        {authUser.identifier} · {roleLabel(language, authUser.role)}
-                      </p>
-                    </div>
-                  </div>
-
-                  {needsProfileSetup ? (
-                    <p className="profile-setup-inline-note">
-                      {language === "te"
-                        ? "మీ ప్రొఫైల్‌ను ఇక్కడే సృష్టించండి. పేరు తప్పనిసరి."
-                        : "Create your profile here. Name is required."}
-                    </p>
-                  ) : null}
-
-                  {isEditingProfile || needsProfileSetup ? (
-                    <div className="form-grid single" style={{ marginTop: 10 }}>
-                      <input
-                        placeholder={language === "te" ? "పూర్తి పేరు" : "Full Name"}
-                        value={profileForm.full_name}
-                        onChange={(e) => setProfileForm({ ...profileForm, full_name: e.target.value })}
-                      />
-                      <input
-                        placeholder={language === "te" ? "ఫోన్ నంబర్" : "Phone Number"}
-                        value={profileForm.phone}
-                        onChange={(e) => setProfileForm({ ...profileForm, phone: e.target.value })}
-                      />
-                      <input
-                        placeholder={language === "te" ? "ఇమెయిల్" : "Email"}
-                        value={profileForm.email}
-                        onChange={(e) => setProfileForm({ ...profileForm, email: e.target.value })}
-                      />
-                      <select
-                        value={profileForm.preferred_language || "en"}
-                        onChange={(e) => {
-                          setProfileForm({ ...profileForm, preferred_language: e.target.value });
-                          setLanguage(e.target.value);
-                        }}
-                      >
-                        <option value="en">{language === "te" ? "ఇంగ్లీష్" : "English"}</option>
-                        <option value="te">{language === "te" ? "తెలుగు" : "Telugu"}</option>
-                      </select>
-                      <label className="muted" style={{ fontSize: 12 }}>
-                        {language === "te" ? "ప్రొఫైల్ చిత్రం" : "Profile Image"}
-                      </label>
-                      <input type="file" accept="image/*" onChange={handleProfileImageUpload} />
-                    </div>
+                  aria-expanded={showProfilePanel}
+                >
+                  {profileImageUrl ? (
+                    <img src={profileImageUrl} alt={userDisplayName} className="avatar-img avatar-img-btn" />
                   ) : (
-                    <div className="top-profile-meta">
-                      <p>{language === "te" ? "ఫోన్" : "Phone"}: {profile?.phone || "-"}</p>
-                      <p>{language === "te" ? "ఇమెయిల్" : "Email"}: {profile?.email || "-"}</p>
-                    </div>
+                    profileInitial
                   )}
+                  {profileIncompleteDot}
+                </button>
+              </div>
+            </div>
 
-                  <div className="inline-actions" style={{ marginBottom: 0 }}>
-                    {isEditingProfile || needsProfileSetup ? (
-                      <>
-                        <button type="button" onClick={saveProfile} disabled={isSavingProfile || !profileForm.full_name}>
-                          {isSavingProfile
-                            ? language === "te"
-                              ? "సేవ్ అవుతోంది..."
-                              : "Saving..."
-                            : needsProfileSetup
-                              ? language === "te"
-                                ? "ప్రొఫైల్ సేవ్"
-                                : "Save Profile"
-                              : language === "te"
-                                ? "సేవ్ చేయి"
-                                : "Save"}
-                        </button>
-                        {!needsProfileSetup ? (
-                          <button type="button" className="ghost" onClick={() => setIsEditingProfile(false)}>
-                            {language === "te" ? "రద్దు" : "Cancel"}
-                          </button>
-                        ) : null}
-                      </>
-                    ) : (
-                      <button type="button" onClick={() => setIsEditingProfile(true)}>
-                        {language === "te" ? "ప్రొఫైల్ మార్చు" : "Edit Profile"}
+            <div className="ff-header-row ff-header-row--bottom">
+              <FleetSearchBar
+                value={fleetSearch}
+                onChange={setFleetSearch}
+                placeholder={language === "te" ? "ట్రిప్, డ్రైవర్, లారీ శోధించండి…" : "Search trips, drivers, lorries…"}
+                className="ff-search--desktop"
+              />
+              <div className="ff-header-toolbar-end">
+                <button
+                  type="button"
+                  className="ff-theme-btn"
+                  onClick={toggleTheme}
+                  aria-label={theme === "dark" ? (language === "te" ? "లైట్ మోడ్" : "Light mode") : (language === "te" ? "డార్క్ మోడ్" : "Dark mode")}
+                >
+                  {theme === "dark" ? "☀" : "☾"}
+                </button>
+                {authUser.role === "admin" ? (
+                  <div className="scope-user-picker">
+                    <label htmlFor="scope-user-select">{language === "te" ? "యూజర్ డేటా" : "View user data"}</label>
+                    <select
+                      id="scope-user-select"
+                      value={selectedScopeUser}
+                      onChange={(event) => setSelectedScopeUser(event.target.value)}
+                    >
+                      <option value="">{language === "te" ? "యూజర్ ఎంచుకోండి" : "Select user"}</option>
+                      {scopeUsers.map((user) => (
+                        <option key={user.identifier} value={user.identifier}>
+                          {user.full_name ? `${user.full_name} (${user.identifier})` : user.identifier}
+                        </option>
+                      ))}
+                    </select>
+                    {selectedScopeUser ? (
+                      <button type="button" className="ghost compact-login-as-btn" onClick={() => loginAsUser(selectedScopeUser)}>
+                        {language === "te" ? "యూజర్‌గా లాగిన్" : "Login as user"}
                       </button>
-                    )}
-                    <button type="button" className="ghost" onClick={handleLanguageToggle}>
-                      {languageToggleLabel(language)}
-                    </button>
-                    <button className="ghost" onClick={handleLogout}>
-                      {language === "te" ? "లాగౌట్" : "Logout"}
-                    </button>
+                    ) : null}
                   </div>
-                </div>
-              ) : null}
+                ) : null}
+                {authUser.acting_as_admin ? (
+                  <button type="button" className="ghost compact-login-as-btn" onClick={exitImpersonation}>
+                    {language === "te" ? "అడ్మిన్‌కు తిరిగి" : "Back to admin"}
+                  </button>
+                ) : null}
+                {activePage !== "Add Lorry" ? (
+                  <div className="workspace-metrics ff-header-metrics">
+                    {workspaceMetrics.map((item) => (
+                      <div className="workspace-metric" key={item.label}>
+                        <span>{item.label}</span>
+                        <strong>{item.value}</strong>
+                      </div>
+                    ))}
+                  </div>
+                ) : null}
+              </div>
             </div>
           </div>
         </div>
@@ -2476,7 +2442,7 @@ export default function App() {
 
         {renderPeriodDriverFilters()}
 
-        <div className="content-stack">{renderPage()}</div>
+        <div className="content-stack ff-workspace-body">{renderPage()}</div>
         <nav className="mobile-bottom-nav" aria-label={language === "te" ? "మొబైల్ నావిగేషన్" : "Mobile navigation"}>
           {mobileNavItems.map((item) => (
             <button
@@ -2508,6 +2474,7 @@ export default function App() {
           </button>
         </nav>
         {driverDetailModal}
+        {profilePanel}
         {confirmModal}
       </main>
     </div>

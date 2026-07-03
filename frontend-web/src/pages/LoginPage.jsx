@@ -518,7 +518,7 @@ export default function LoginPage({
             />
           </svg>
           <span>{t("Light", "లైట్")}</span>
-        </button>
+            </button>
         <button
           type="button"
           className={`auth-control-btn ${themeMode === "dark" ? "active" : ""}`}
@@ -530,7 +530,7 @@ export default function LoginPage({
             <path d="M11.714 2.296a.75.75 0 00-.973.824 6.5 6.5 0 018.252 8.253.75.75 0 00.824-.973A8 8 0 1111.714 2.296z" />
           </svg>
           <span>{t("Dark", "డార్క్")}</span>
-        </button>
+          </button>
       </div>
       <div className="auth-layout">
         <aside className="auth-hero" aria-label={t("Fleet Workspace", "ఫ్లీట్ వర్క్‌స్పేస్")}>
@@ -585,7 +585,7 @@ export default function LoginPage({
                   );
                 })}
               </div>
-            ) : null}
+      ) : null}
 
             {isRegisterMode ? (
               <RegisterForm
@@ -609,8 +609,8 @@ export default function LoginPage({
                     <AuthInput
                       label={t("User ID", "యూజర్ ID")}
                       id="forgot-identifier"
-                      value={form.identifier}
-                      onChange={(e) => setForm({ ...form, identifier: e.target.value })}
+            value={form.identifier}
+            onChange={(e) => setForm({ ...form, identifier: e.target.value })}
                       autoComplete="username"
                       icon={
                         <svg viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
@@ -621,17 +621,17 @@ export default function LoginPage({
                     <PasswordInput
                       label={t("New password", "కొత్త పాస్‌వర్డ్")}
                       id="forgot-password"
-                      value={resetPassword}
-                      onChange={(e) => setResetPassword(e.target.value)}
+            value={resetPassword}
+            onChange={(e) => setResetPassword(e.target.value)}
                       autoComplete="new-password"
                       placeholder={t("Enter new password", "కొత్త పాస్‌వర్డ్ నమోదు చేయండి")}
-                    />
-                    <button
-                      type="button"
+          />
+          <button
+            type="button"
                       className="auth-submit"
-                      onClick={() => onForgotPassword?.(form.identifier, resetPassword, () => setResetPassword(""))}
-                      disabled={!form.identifier || !resetPassword}
-                    >
+            onClick={() => onForgotPassword?.(form.identifier, resetPassword, () => setResetPassword(""))}
+            disabled={!form.identifier || !resetPassword}
+          >
                       <span>{t("Update password", "పాస్‌వర్డ్ నవీకరించు")}</span>
                       <svg viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
                         <path
@@ -640,7 +640,7 @@ export default function LoginPage({
                           clipRule="evenodd"
                         />
                       </svg>
-                    </button>
+          </button>
                     <p className="auth-switch-prompt">
                       {t("Remember your password?", "పాస్‌వర్డ్ గుర్తుందా?")}{" "}
                       <button className="auth-link" type="button" onClick={() => setUserMode(USER_MODES.login)}>
@@ -674,7 +674,7 @@ export default function LoginPage({
                       />
                       <div className="auth-form-options">
                         <label className="auth-remember">
-                          <input
+          <input
                             type="checkbox"
                             checked={rememberMe}
                             onChange={(e) => setRememberMe(e.target.checked)}
@@ -682,9 +682,9 @@ export default function LoginPage({
                           <span>{t("Remember me", "నన్ను గుర్తుంచుకో")}</span>
                         </label>
                         {activeRole === ROLES.user ? (
-                          <button
+              <button
                             className="auth-link auth-link-inline"
-                            type="button"
+                type="button"
                             onClick={() => setUserMode(USER_MODES.forgot)}
                           >
                             {t("Forgot password?", "పాస్‌వర్డ్ మర్చిపోయారా?")}
@@ -726,7 +726,7 @@ export default function LoginPage({
                         {t("Need an account?", "అకౌంట్ కావాలా?")}{" "}
                         <button className="auth-link" type="button" onClick={openRegister}>
                           {t("Sign up", "సైన్ అప్")}
-                        </button>
+              </button>
                       </p>
                     ) : null}
                   </>
@@ -753,10 +753,10 @@ export default function LoginPage({
           <span className="auth-page-footer-links">
             <button type="button" className="auth-link auth-link-muted auth-link-inline">
               {t("Privacy Policy", "గోప్యతా విధానం")}
-            </button>
+          </button>
             <button type="button" className="auth-link auth-link-muted auth-link-inline">
               {t("Terms of Service", "సేవా నిబంధనలు")}
-            </button>
+          </button>
           </span>
         </div>
       </footer>

@@ -1,12 +1,12 @@
-import { tripStatusClass, tripStatusLabel } from "../../utils/fleetLabels";
+import StatusChip from "../../components/fleetflow/StatusChip";
 import { getPeriodLabel } from "../../utils/periodFilter";
 
 export default function MobileTripContactsPage({ trips, drivers, language = "en", periodFilter = "complete" }) {
   const t = (en, te) => (language === "te" ? te : en);
 
   return (
-    <div className="mu-page">
-      <div className="mu-screen-head">
+    <div className="mu-page ff-page ff-dashboard--mobile">
+      <div className="ff-page-header">
         <div>
           <h2 className="mu-screen-title">{t("Trip Contacts", "ట్రిప్ సంప్రదింపులు")}</h2>
           <p className="mu-section-sub">{t("Tap to call consignee contacts.", "సంప్రదింపులకు కాల్ చేయడానికి ట్యాప్ చేయండి.")}</p>
@@ -16,7 +16,7 @@ export default function MobileTripContactsPage({ trips, drivers, language = "en"
         </span>
       </div>
 
-      <div className="mu-card">
+      <div className="ff-glass-card">
         {trips.length ? (
           trips.map((trip) => {
             const phone = (trip.contact_person_phone || "").replace(/\s+/g, "");
@@ -28,9 +28,7 @@ export default function MobileTripContactsPage({ trips, drivers, language = "en"
                     <span className="mu-row-title">
                       {trip.load_location} → {trip.unload_location}
                     </span>
-                    <span className={`mu-status-pill ${tripStatusClass(trip.status)}`}>
-                      {tripStatusLabel(trip.status, language)}
-                    </span>
+                    <StatusChip status={trip.status} language={language} live={trip.status === "On route"} />
                   </div>
                   <p className="mu-row-meta">
                     {t("Driver", "డ్రైవర్")}: {driverName}

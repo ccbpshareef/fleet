@@ -104,7 +104,7 @@ export default function DriverManagementPage({
   });
 
   return (
-    <section className="panel driver-management-panel">
+    <section className="panel driver-management-panel ff-page">
       <div className="driver-management-head">
         <div>
           <h2>{t("Driver Management", "\u0c21\u0c4d\u0c30\u0c48\u0c35\u0c30\u0c4d \u0c28\u0c3f\u0c30\u0c4d\u0c35\u0c39\u0c23")}</h2>

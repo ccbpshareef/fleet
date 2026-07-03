@@ -45,8 +45,8 @@ export default function MobileMorePage({
   ];
 
   return (
-    <div className="mu-page">
-      <div className="mu-screen-head">
+    <div className="mu-page ff-page ff-dashboard--mobile">
+      <div className="ff-page-header">
         <div>
           <h2 className="mu-screen-title">{t("More", "మరిన్ని")}</h2>
           <p className="mu-section-sub">

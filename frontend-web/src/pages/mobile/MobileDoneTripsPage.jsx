@@ -31,8 +31,8 @@ export default function MobileDoneTripsPage({
   const selectedExpense = selectedTripId ? expenseTotalsByTrip[selectedTripId] : null;
 
   return (
-    <div className="mu-page">
-      <div className="mu-screen-head">
+    <div className="mu-page ff-page ff-dashboard--mobile">
+      <div className="ff-page-header">
         <div>
           <h2 className="mu-screen-title">{t("Done Trips", "పూర్తైన ట్రిప్స్")}</h2>
           <p className="mu-section-sub">{t("Completed deliveries and trip history.", "పూర్తైన డెలివరీలు మరియు ట్రిప్ చరిత్ర.")}</p>
@@ -42,7 +42,7 @@ export default function MobileDoneTripsPage({
         </span>
       </div>
 
-      <div className="mu-card">
+      <div className="ff-glass-card">
         {doneTrips.length ? (
           doneTrips.map((trip) => (
             <MobileTripListRow
